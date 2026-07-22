@@ -3,24 +3,52 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  color-scheme: light;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-source-code-pro);
 }
 
+/* System preference (unless explicitly overridden to light) */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --background: #0a0a0a;
     --foreground: #ededed;
+    color-scheme: dark;
   }
 }
+
+/* Explicit user choice from Settings */
+:root[data-theme="dark"] {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+  color-scheme: dark;
+}
+
+/* Space invader loader: two sprite frames alternate while it marches side to side */
+@keyframes invader-frame-a {
+  0%, 49.99% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+@keyframes invader-frame-b {
+  0%, 49.99% { opacity: 0; }
+  50%, 100% { opacity: 1; }
+}
+@keyframes invader-march {
+  0% { transform: translateX(-14px); }
+  50% { transform: translateX(14px); }
+  100% { transform: translateX(-14px); }
+}
+.invader-frame-a { animation: invader-frame-a 0.6s steps(1) infinite; }
+.invader-frame-b { animation: invader-frame-b 0.6s steps(1) infinite; }
+.invader-march { animation: invader-march 2.4s steps(8) infinite; }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-inter), sans-serif;
 }

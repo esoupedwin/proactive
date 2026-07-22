@@ -1,36 +1,40 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PROACTIVE
 
-## Getting Started
+A mobile-first web app that keeps you updated on topics you care about, so you can hold informed conversations. For each interest you add, it produces a very short AI-generated update from three angles:
 
-First, run the development server:
+- **News** — latest reporting, via OpenAI web search
+- **Medium** — what bloggers are arguing, via OpenAI web search scoped to medium.com
+- **Reddit** — what communities are discussing, via the Reddit API + OpenAI synthesis
+
+Each interest carries an *"I want to know"* intent that steers what the AI looks for. Updates are fetched on demand and cached in Supabase, with source links attached.
+
+## Stack
+
+- [Next.js](https://nextjs.org) (App Router, TypeScript, Tailwind CSS)
+- [Supabase](https://supabase.com) — Postgres + Google authentication
+- [OpenAI Responses API](https://platform.openai.com/docs) with the `web_search` tool
+- Deployed on [Vercel](https://vercel.com)
+
+## Getting started
+
+See **[SETUP.md](SETUP.md)** for the full walkthrough (Supabase project, Google OAuth, OpenAI key, Vercel deploy). In short:
 
 ```bash
+cp .env.local.example .env.local  # fill in Supabase + OpenAI keys
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Project layout
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```
+supabase/migrations/    SQL schema (interests, updates, RLS policies)
+src/proxy.ts            Session refresh + route protection
+src/lib/supabase/       Browser & server Supabase clients
+src/lib/openai.ts       Responses API helpers (web search + summarize)
+src/lib/fetchers/       Per-source pipelines: news, medium, reddit
+src/app/login/          Google sign-in
+src/app/(app)/          Tabs (news | medium | reddit) + settings
+src/app/api/fetch/      POST { source } → fetch & cache updates per interest
+src/components/         TabBar, SourceFeed, UpdateCard, InterestManager, …
+```
