@@ -74,11 +74,16 @@ function LoginForm() {
         </button>
       )}
 
-      {authError && (
+      {authError === "not_allowed" ? (
+        <p className="max-w-sm text-center text-sm text-red-600">
+          This app is invite-only and your Google account isn&apos;t on the
+          allowlist. Contact the owner for access.
+        </p>
+      ) : authError ? (
         <p className="text-sm text-red-600">
           Sign-in failed. Please try again.
         </p>
-      )}
+      ) : null}
     </main>
   );
 }

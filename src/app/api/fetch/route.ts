@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isEmailAllowed } from "@/lib/allowlist";
 import { createClient } from "@/lib/supabase/server";
 import { fetchers } from "@/lib/fetchers";
 import { isNoNewUpdates } from "@/lib/fetchers/shared";
@@ -16,6 +17,9 @@ export async function POST(request: Request) {
 
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+  if (!isEmailAllowed(user.email)) {
+    return NextResponse.json({ error: "Not authorized" }, { status: 403 });
   }
 
   let body: { source?: string; interestId?: string };

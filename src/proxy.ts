@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { isEmailAllowed } from "@/lib/allowlist";
 
 export default async function proxy(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -40,11 +41,18 @@ export default async function proxy(request: NextRequest) {
 
   const path = request.nextUrl.pathname;
   const isPublic = path.startsWith("/login") || path.startsWith("/auth");
+  const allowed = isEmailAllowed(user?.email);
 
   if (!user && !isPublic) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
-  if (user && path.startsWith("/login")) {
+  if (user && !allowed && !isPublic) {
+    // Signed in but not on the allowlist (e.g. a pre-existing session).
+    return NextResponse.redirect(
+      new URL("/login?error=not_allowed", request.url)
+    );
+  }
+  if (user && allowed && path.startsWith("/login")) {
     return NextResponse.redirect(new URL("/news", request.url));
   }
 
