@@ -1,0 +1,101 @@
+import type { Report, ReportUsage, Topic } from "./types";
+
+/** A 'generating' report younger than this blocks a new generation. */
+export const GENERATION_LOCK_MINUTES = 10;
+
+const HOUR_MS = 60 * 60 * 1000;
+
+/**
+ * Whether a scheduled run should regenerate this topic now.
+ * Slightly under the nominal period so a daily 8:00 cron doesn't skip a
+ * topic generated at 8:01 the previous day.
+ */
+export function isTopicDue(topic: Topic, now: Date = new Date()): boolean {
+  if (topic.status !== "active") return false;
+  if (topic.frequency === "manual") return false;
+  if (!topic.last_generated_at) return true;
+
+  const ageMs = now.getTime() - new Date(topic.last_generated_at).getTime();
+  const thresholdMs =
+    topic.frequency === "daily" ? 23 * HOUR_MS : 6.5 * 24 * HOUR_MS;
+  return ageMs >= thresholdMs;
+}
+
+/** Whether an in-flight generation should block starting another one. */
+export function isGenerationLocked(
+  latestGenerating: Pick<Report, "status" | "created_at"> | null,
+  now: Date = new Date(),
+): boolean {
+  if (!latestGenerating || latestGenerating.status !== "generating") {
+    return false;
+  }
+  const ageMinutes =
+    (now.getTime() - new Date(latestGenerating.created_at).getTime()) / 60000;
+  // Older locks are treated as crashed runs and ignored.
+  return ageMinutes < GENERATION_LOCK_MINUTES;
+}
+
+/** "29 Jul 2026, 8:00 AM" style timestamp used across the UI. */
+export function formatDateTime(iso: string | null | undefined): string {
+  if (!iso) return "Never";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "Unknown";
+  return date.toLocaleString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
+/** Formats elapsed milliseconds as m:ss.mmm (used by the generation timer). */
+export function formatElapsed(ms: number): string {
+  const total = Math.max(0, Math.floor(ms));
+  const minutes = Math.floor(total / 60_000);
+  const seconds = Math.floor((total % 60_000) / 1000);
+  const millis = total % 1000;
+  return `${minutes}:${String(seconds).padStart(2, "0")}.${String(millis).padStart(3, "0")}`;
+}
+
+/** Compact token count, e.g. "48.2k" or "1.3M". */
+export function formatTokens(count: number): string {
+  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
+  if (count >= 1_000) return `${(count / 1_000).toFixed(1)}k`;
+  return String(count);
+}
+
+/** Estimated cost label, e.g. "~$0.19" (or "<$0.01" for tiny runs). */
+export function formatUsd(value: number): string {
+  if (value > 0 && value < 0.01) return "<$0.01";
+  return `~$${value.toFixed(2)}`;
+}
+
+/** "48.2k tokens · ~$0.19" — null when there's nothing to show. */
+export function formatUsageSummary(usage: ReportUsage | null | undefined): string | null {
+  if (!usage || usage.calls === 0) return null;
+  const tokens = usage.input_tokens + usage.output_tokens;
+  const parts = [`${formatTokens(tokens)} tokens`];
+  if (usage.estimated_cost_usd !== null) {
+    parts.push(formatUsd(usage.estimated_cost_usd));
+  }
+  return parts.join(" · ");
+}
+
+/** Compact relative age, e.g. "3h ago". */
+export function formatRelativeAge(
+  iso: string | null | undefined,
+  now: Date = new Date(),
+): string {
+  if (!iso) return "never";
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "unknown";
+  const minutes = Math.max(0, Math.floor((now.getTime() - then) / 60000));
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}

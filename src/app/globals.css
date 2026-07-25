@@ -1,0 +1,25 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-lexend), ui-sans-serif, system-ui, sans-serif;
+  --color-ink: #111111;
+  --color-ink-soft: #444444;
+  --color-ink-faint: #767676;
+  --color-paper: #fdfdfc;
+  --color-rule: #e4e4e0;
+}
+
+html {
+  background: var(--color-paper);
+}
+
+body {
+  font-family: var(--font-lexend), ui-sans-serif, system-ui, sans-serif;
+  /* Default body weight; the user's saved preference overrides this via an
+     inline style set in the root layout. */
+  font-weight: 400;
+  color: var(--color-ink);
+  font-feature-settings: "ss01";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
