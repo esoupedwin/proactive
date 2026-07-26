@@ -4,6 +4,7 @@ import {
   createSupabaseReportStore,
   runReportPipeline,
 } from "@/lib/ai/pipeline";
+import { runActiveExpertsForReport } from "@/lib/ai/experts/runner";
 import { createTraceCollector } from "@/lib/ai/trace";
 import { createUsageCollector } from "@/lib/ai/usage";
 import { isGenerationLocked, isTopicDue } from "@/lib/reports";
@@ -71,14 +72,35 @@ export async function GET(request: Request) {
 
     const usage = createUsageCollector();
     const trace = createTraceCollector();
+    const llm = createOpenAiLlm(usage, trace);
     const result = await runReportPipeline({
-      llm: createOpenAiLlm(usage, trace),
+      llm,
       store: createSupabaseReportStore(supabase),
       topic,
       reportId: report.id,
       usage,
       trace,
     });
+
+    if (result.ok) {
+      try {
+        const ran = await runActiveExpertsForReport({
+          supabase,
+          llm,
+          topic,
+          reportId: report.id,
+        });
+        if (ran > 0) {
+          await supabase
+            .from("reports")
+            .update({ usage: usage.snapshot(), trace: trace.snapshot() })
+            .eq("id", report.id);
+        }
+      } catch (err) {
+        console.error("experts run failed", err);
+      }
+    }
+
     results.push({ topicId: topic.id, ok: result.ok, error: result.error });
   }
 

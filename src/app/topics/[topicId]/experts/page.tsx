@@ -1,0 +1,179 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { Bot, ChevronLeft } from "lucide-react";
+import { LinkPending } from "@/components/link-pending";
+import { Badge, Button, Field, Select } from "@/components/ui";
+import {
+  addMentorExpert,
+  deleteExpert,
+  toggleExpertStatus,
+  updateExpertLevel,
+} from "@/lib/actions";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+import type { Expert, Topic } from "@/lib/types";
+
+export const dynamic = "force-dynamic";
+
+const LEVEL_OPTIONS = [
+  { value: "basic", label: "Basic — explain like I'm new to this" },
+  { value: "intermediate", label: "Intermediate — I have working knowledge" },
+  { value: "advanced", label: "Advanced — only non-obvious context" },
+];
+
+/** Manage the experts attached to a topic. */
+export default async function TopicExpertsPage({
+  params,
+}: {
+  params: Promise<{ topicId: string }>;
+}) {
+  const { topicId } = await params;
+  const supabase = await createSupabaseServerClient();
+
+  const { data: topic } = await supabase
+    .from("topics")
+    .select("*")
+    .eq("id", topicId)
+    .maybeSingle<Topic>();
+  if (!topic) notFound();
+
+  const { data } = await supabase
+    .from("experts")
+    .select("*")
+    .eq("topic_id", topicId)
+    .order("created_at");
+  const experts = (data ?? []) as Expert[];
+  const mentor = experts.find((e) => e.kind === "mentor");
+
+  const boundAddMentor = addMentorExpert.bind(null, topicId);
+
+  return (
+    <main className="px-5 pb-16 pt-6">
+      <header className="mb-6 border-b border-rule pb-4">
+        <Link
+          href={`/topics/${topicId}`}
+          className="mb-2 inline-flex items-center gap-1 text-sm text-ink-faint hover:text-ink"
+        >
+          <LinkPending>
+            <ChevronLeft className="size-4" aria-hidden />
+          </LinkPending>{" "}
+          {topic.title}
+        </Link>
+        <h1 className="text-2xl font-bold tracking-tight">Experts</h1>
+        <p className="mt-1 text-sm leading-relaxed text-ink-soft">
+          Experts read each generated report and add their own output below
+          it.
+        </p>
+      </header>
+
+      {mentor ? (
+        <section
+          aria-label="Mentor"
+          className="rounded-md border border-rule"
+        >
+          <div className="flex items-center gap-3 border-b border-rule px-4 py-3">
+            <span
+              aria-hidden
+              className="flex size-9 shrink-0 items-center justify-center rounded-full border border-rule bg-neutral-50"
+            >
+              <Bot className="size-5" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold">Mentor</p>
+              <p className="text-xs text-ink-faint">
+                Explains key concepts, entities, and relationships in each
+                report. Remembers what you already know.
+              </p>
+            </div>
+            <Badge tone={mentor.status === "active" ? "active" : "paused"}>
+              {mentor.status}
+            </Badge>
+          </div>
+
+          <div className="space-y-4 px-4 py-4">
+            <form
+              action={updateExpertLevel.bind(null, mentor.id)}
+              className="space-y-3"
+            >
+              <Field
+                label="Teaching level"
+                htmlFor="level"
+                hint="How basic or advanced Mentor's explanations should be."
+              >
+                <Select
+                  id="level"
+                  name="level"
+                  defaultValue={mentor.config.level ?? "basic"}
+                >
+                  {LEVEL_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Button type="submit" variant="outline">
+                Save level
+              </Button>
+            </form>
+
+            <div className="flex flex-wrap gap-2 border-t border-rule pt-4">
+              <form action={toggleExpertStatus.bind(null, mentor.id)}>
+                <Button type="submit" variant="outline">
+                  {mentor.status === "active" ? "Pause Mentor" : "Resume Mentor"}
+                </Button>
+              </form>
+              <form action={deleteExpert.bind(null, mentor.id)}>
+                <Button type="submit" variant="danger">
+                  Remove Mentor
+                </Button>
+              </form>
+            </div>
+            <p className="text-xs text-ink-faint">
+              Removing Mentor also deletes what it remembers teaching you for
+              this topic.
+            </p>
+          </div>
+        </section>
+      ) : (
+        <section aria-label="Add Mentor" className="rounded-md border border-rule">
+          <div className="flex items-center gap-3 border-b border-rule px-4 py-3">
+            <span
+              aria-hidden
+              className="flex size-9 shrink-0 items-center justify-center rounded-full border border-rule bg-neutral-50"
+            >
+              <Bot className="size-5" />
+            </span>
+            <div>
+              <p className="text-sm font-bold">Mentor</p>
+              <p className="text-xs text-ink-faint">
+                “Did you know” tips that build your understanding of this
+                topic over time.
+              </p>
+            </div>
+          </div>
+          <form action={boundAddMentor} className="space-y-3 px-4 py-4">
+            <Field
+              label="Teaching level"
+              htmlFor="level"
+              hint="You can change this anytime."
+            >
+              <Select id="level" name="level" defaultValue="basic">
+                {LEVEL_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Button type="submit">Add Mentor to this topic</Button>
+          </form>
+        </section>
+      )}
+
+      <p className="mt-6 text-xs leading-relaxed text-ink-faint">
+        More expert types are coming — each reads the report and contributes
+        its own section, like Mentor does today.
+      </p>
+    </main>
+  );
+}

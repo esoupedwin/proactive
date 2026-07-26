@@ -135,6 +135,66 @@ export interface Source {
   created_at: string;
 }
 
+// ---- Experts ---------------------------------------------------------------
+
+export type ExpertKind = "mentor";
+export type MentorLevel = "basic" | "intermediate" | "advanced";
+
+export interface ExpertConfig {
+  /** Mentor: how basic or advanced explanations should be. */
+  level?: MentorLevel;
+}
+
+/** An LLM module attached to a topic that reads reports and adds output. */
+export interface Expert {
+  id: string;
+  topic_id: string;
+  user_id: string;
+  kind: ExpertKind;
+  name: string;
+  status: TopicStatus;
+  config: ExpertConfig;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MentorTip {
+  id: string;
+  concept: string;
+  tip: string;
+  /** Deeper follow-up explanation from "Share more", if requested. */
+  more?: string | null;
+}
+
+export interface ExpertOutput {
+  id: string;
+  expert_id: string;
+  report_id: string;
+  topic_id: string;
+  user_id: string;
+  kind: ExpertKind;
+  output: { tips: MentorTip[] };
+  created_at: string;
+}
+
+export interface TaughtConcept {
+  concept: string;
+  status: "taught" | "known" | "revisit";
+  times: number;
+  last_taught_at: string;
+}
+
+export interface MentorMemoryData {
+  taught: TaughtConcept[];
+}
+
+export interface ExpertMemory {
+  expert_id: string;
+  user_id: string;
+  memory: MentorMemoryData;
+  updated_at: string;
+}
+
 // ---- Memory ----------------------------------------------------------------
 
 export interface ReportedDevelopment {

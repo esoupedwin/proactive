@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { History, Layers, Pencil, Terminal } from "lucide-react";
+import { Bot, History, Layers, Pencil, Terminal } from "lucide-react";
 import { BottomNav } from "@/components/bottom-nav";
+import { ExpertPanel, type ExpertPanelItem } from "@/components/expert-panel";
 import { GenerateButton } from "@/components/generate-button";
 import { GenerationWatcher } from "@/components/generation-watcher";
 import { LinkPending } from "@/components/link-pending";
@@ -15,7 +16,14 @@ import {
 } from "@/lib/reports";
 import { keyEntitiesFromMemory } from "@/lib/entities";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import type { Report, Source, Topic, TopicMemory } from "@/lib/types";
+import type {
+  Expert,
+  ExpertOutput,
+  Report,
+  Source,
+  Topic,
+  TopicMemory,
+} from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -69,21 +77,39 @@ export default async function TopicBriefingPage({
 
   let sources: Source[] = [];
   let fallbackEntities: string[] = [];
+  let expertItems: ExpertPanelItem[] = [];
   if (readyReport) {
-    const [{ data }, { data: memory }] = await Promise.all([
-      supabase
-        .from("sources")
-        .select("*")
-        .eq("report_id", readyReport.id)
-        .order("created_at"),
-      supabase
-        .from("topic_memory")
-        .select("facts")
-        .eq("topic_id", topic.id)
-        .maybeSingle<Pick<TopicMemory, "facts">>(),
-    ]);
+    const [{ data }, { data: memory }, { data: expertRows }, { data: outputRows }] =
+      await Promise.all([
+        supabase
+          .from("sources")
+          .select("*")
+          .eq("report_id", readyReport.id)
+          .order("created_at"),
+        supabase
+          .from("topic_memory")
+          .select("facts")
+          .eq("topic_id", topic.id)
+          .maybeSingle<Pick<TopicMemory, "facts">>(),
+        supabase
+          .from("experts")
+          .select("*")
+          .eq("topic_id", topic.id)
+          .eq("status", "active")
+          .order("created_at"),
+        supabase
+          .from("expert_outputs")
+          .select("*")
+          .eq("report_id", readyReport.id),
+      ]);
     sources = (data ?? []) as Source[];
     fallbackEntities = keyEntitiesFromMemory(memory?.facts ?? []);
+
+    const outputs = (outputRows ?? []) as ExpertOutput[];
+    expertItems = ((expertRows ?? []) as Expert[]).map((expert) => ({
+      expert,
+      output: outputs.find((o) => o.expert_id === expert.id) ?? null,
+    }));
   }
 
   return (
@@ -124,11 +150,14 @@ export default async function TopicBriefingPage({
       )}
 
       {readyReport?.sections ? (
-        <ReportView
-          sections={readyReport.sections}
-          sources={sources}
-          fallbackEntities={fallbackEntities}
-        />
+        <>
+          <ReportView
+            sections={readyReport.sections}
+            sources={sources}
+            fallbackEntities={fallbackEntities}
+          />
+          <ExpertPanel items={expertItems} reportId={readyReport.id} />
+        </>
       ) : (
         !generating && (
           <div className="rounded-md border border-rule bg-neutral-50 px-4 py-8 text-center">
@@ -179,6 +208,15 @@ export default async function TopicBriefingPage({
               <Terminal className="size-4" aria-hidden />
             </LinkPending>{" "}
             Prompts
+          </Link>
+          <Link
+            href={`/topics/${topic.id}/experts`}
+            className="inline-flex min-h-11 items-center gap-2 rounded-md border border-rule px-4 text-sm font-medium hover:bg-neutral-100"
+          >
+            <LinkPending>
+              <Bot className="size-4" aria-hidden />
+            </LinkPending>{" "}
+            Experts
           </Link>
         </div>
       </div>

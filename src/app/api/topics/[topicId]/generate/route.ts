@@ -4,6 +4,7 @@ import {
   createSupabaseReportStore,
   runReportPipeline,
 } from "@/lib/ai/pipeline";
+import { runActiveExpertsForReport } from "@/lib/ai/experts/runner";
 import { createTraceCollector } from "@/lib/ai/trace";
 import { createUsageCollector } from "@/lib/ai/usage";
 import { isGenerationLocked } from "@/lib/reports";
@@ -69,8 +70,9 @@ export async function POST(
 
   const usage = createUsageCollector();
   const trace = createTraceCollector();
+  const llm = createOpenAiLlm(usage, trace);
   const result = await runReportPipeline({
-    llm: createOpenAiLlm(usage, trace),
+    llm,
     store: createSupabaseReportStore(supabase),
     topic,
     reportId: report.id,
@@ -83,6 +85,25 @@ export async function POST(
       { error: result.error ?? "Report generation failed." },
       { status: 500 },
     );
+  }
+
+  // Experts (e.g. Mentor) read the finished report; their calls share the
+  // usage/trace collectors, so refresh the stored snapshots afterwards.
+  try {
+    const ran = await runActiveExpertsForReport({
+      supabase,
+      llm,
+      topic,
+      reportId: report.id,
+    });
+    if (ran > 0) {
+      await supabase
+        .from("reports")
+        .update({ usage: usage.snapshot(), trace: trace.snapshot() })
+        .eq("id", report.id);
+    }
+  } catch (err) {
+    console.error("experts run failed", err);
   }
 
   return NextResponse.json({

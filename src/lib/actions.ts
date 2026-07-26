@@ -5,7 +5,13 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { SEED_TOPICS } from "./seed-data";
 import { createSupabaseServerClient } from "./supabase/server";
-import type { DetailLevel, Topic } from "./types";
+import type {
+  DetailLevel,
+  Expert,
+  MentorLevel,
+  MentorMemoryData,
+  Topic,
+} from "./types";
 
 // ---------------------------------------------------------------------------
 // Validation
@@ -160,6 +166,141 @@ export async function deleteTopic(topicId: string): Promise<void> {
 
   revalidatePath("/settings");
   redirect("/settings");
+}
+
+// ---------------------------------------------------------------------------
+// Experts
+// ---------------------------------------------------------------------------
+
+const MENTOR_LEVELS: MentorLevel[] = ["basic", "intermediate", "advanced"];
+
+function parseMentorLevel(value: FormDataEntryValue | null): MentorLevel {
+  const level = String(value ?? "basic") as MentorLevel;
+  return MENTOR_LEVELS.includes(level) ? level : "basic";
+}
+
+export async function addMentorExpert(
+  topicId: string,
+  formData: FormData,
+): Promise<void> {
+  const { supabase, user } = await requireUser();
+
+  await supabase.from("experts").insert({
+    topic_id: topicId,
+    user_id: user.id,
+    kind: "mentor",
+    name: "Mentor",
+    status: "active",
+    config: { level: parseMentorLevel(formData.get("level")) },
+  });
+
+  revalidatePath(`/topics/${topicId}/experts`);
+  revalidatePath(`/topics/${topicId}`);
+}
+
+export async function updateExpertLevel(
+  expertId: string,
+  formData: FormData,
+): Promise<void> {
+  const { supabase } = await requireUser();
+
+  const { data: expert } = await supabase
+    .from("experts")
+    .select("topic_id, config")
+    .eq("id", expertId)
+    .maybeSingle<Pick<Expert, "topic_id" | "config">>();
+  if (!expert) return;
+
+  await supabase
+    .from("experts")
+    .update({
+      config: { ...expert.config, level: parseMentorLevel(formData.get("level")) },
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", expertId);
+
+  revalidatePath(`/topics/${expert.topic_id}/experts`);
+}
+
+export async function toggleExpertStatus(expertId: string): Promise<void> {
+  const { supabase } = await requireUser();
+
+  const { data: expert } = await supabase
+    .from("experts")
+    .select("topic_id, status")
+    .eq("id", expertId)
+    .maybeSingle<Pick<Expert, "topic_id" | "status">>();
+  if (!expert) return;
+
+  await supabase
+    .from("experts")
+    .update({
+      status: expert.status === "active" ? "paused" : "active",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", expertId);
+
+  revalidatePath(`/topics/${expert.topic_id}/experts`);
+  revalidatePath(`/topics/${expert.topic_id}`);
+}
+
+export async function deleteExpert(expertId: string): Promise<void> {
+  const { supabase } = await requireUser();
+
+  const { data: expert } = await supabase
+    .from("experts")
+    .select("topic_id")
+    .eq("id", expertId)
+    .maybeSingle<Pick<Expert, "topic_id">>();
+
+  await supabase.from("experts").delete().eq("id", expertId);
+
+  if (expert) {
+    revalidatePath(`/topics/${expert.topic_id}/experts`);
+    revalidatePath(`/topics/${expert.topic_id}`);
+  }
+}
+
+/**
+ * Feedback on a Mentor tip: 'known' — never teach this again;
+ * 'remind' — bring it back in a future report.
+ */
+export async function mentorTipFeedback(
+  expertId: string,
+  concept: string,
+  feedback: "known" | "remind",
+): Promise<void> {
+  const { supabase, user } = await requireUser();
+
+  const { data: row } = await supabase
+    .from("expert_memory")
+    .select("memory")
+    .eq("expert_id", expertId)
+    .maybeSingle<{ memory: MentorMemoryData }>();
+  const memory: MentorMemoryData = row?.memory ?? { taught: [] };
+
+  const status = feedback === "known" ? "known" : "revisit";
+  const key = concept.trim().toLowerCase();
+  const existing = memory.taught.find(
+    (t) => t.concept.toLowerCase() === key,
+  );
+  if (existing) {
+    existing.status = status;
+  } else {
+    memory.taught.push({
+      concept: concept.trim(),
+      status,
+      times: 1,
+      last_taught_at: new Date().toISOString(),
+    });
+  }
+
+  await supabase.from("expert_memory").upsert({
+    expert_id: expertId,
+    user_id: user.id,
+    memory,
+    updated_at: new Date().toISOString(),
+  });
 }
 
 // ---------------------------------------------------------------------------
