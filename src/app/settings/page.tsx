@@ -153,10 +153,10 @@ export default async function SettingsPage() {
       </section>
 
       {/* Manage list */}
-      <section aria-label="Interests">
+      <section aria-label="Topics of Interest">
         <div className="mb-1 flex items-center justify-between border-b border-rule pb-1">
           <h2 className="text-sm font-bold uppercase tracking-wide">
-            Interests
+            Topics of Interest
           </h2>
           <Link
             href="/topics/new"
