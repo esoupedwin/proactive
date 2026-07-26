@@ -1,3 +1,4 @@
+import { stripEntityMarkers } from "../entities";
 import type { Extract, Topic, TopicMemory } from "../types";
 import type { Llm } from "./llm";
 import { MemoryUpdateSchema } from "./schemas";
@@ -20,6 +21,18 @@ export async function updateTopicMemory(
   draft: ReportDraft,
   extracts: Extract[],
 ): Promise<TopicMemory> {
+  // Memory stores plain text — drop the report's inline **entity** markers.
+  const stripBullets = (bullets: ReportDraft["latest_developments"]) =>
+    bullets.map((b) => ({ ...b, text: stripEntityMarkers(b.text) }));
+  const plainDraft: ReportDraft = {
+    ...draft,
+    latest_developments: stripBullets(draft.latest_developments),
+    community_reaction: stripBullets(draft.community_reaction),
+    practitioner_view: stripBullets(draft.practitioner_view),
+    what_changed: stripBullets(draft.what_changed),
+    cross_source_takeaway: stripEntityMarkers(draft.cross_source_takeaway),
+    summary: stripEntityMarkers(draft.summary),
+  };
   const update = await llm.structured({
     tier: "report",
     schema: MemoryUpdateSchema,
@@ -43,7 +56,7 @@ export async function updateTopicMemory(
           facts: memory.facts,
           open_questions: memory.open_questions,
         },
-        new_report: draft,
+        new_report: plainDraft,
         new_extracts: extracts.map((e) => ({
           source_type: e.source_type,
           gist: e.gist,
@@ -67,10 +80,11 @@ export async function updateTopicMemory(
     reported_developments: update.reported_developments
       .slice(0, MAX_DEVELOPMENTS)
       .map((d) => {
-        const existing = previousByText.get(d.text);
+        const text = stripEntityMarkers(d.text);
+        const existing = previousByText.get(text);
         return {
           id: existing?.id ?? crypto.randomUUID(),
-          text: d.text,
+          text,
           first_reported_at: existing?.first_reported_at ?? now,
         };
       }),

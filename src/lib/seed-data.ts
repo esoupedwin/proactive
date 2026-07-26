@@ -152,6 +152,7 @@ export const SEED_TOPICS: SeedTopic[] = [
             url: "https://picsum.photos/seed/proactive-llms/800/450",
             source_ref: 0,
             alt: "Sample cover image for the LLM releases briefing",
+            description: "Sample placeholder image (frontier model launch coverage)",
           },
           latest_developments: [
             bullet(
@@ -325,6 +326,7 @@ export const SEED_TOPICS: SeedTopic[] = [
             url: "https://picsum.photos/seed/proactive-gulf/800/450",
             source_ref: 0,
             alt: "Sample cover image for the US–Iran conflict briefing",
+            description: "Sample placeholder image (Gulf security coverage)",
           },
           latest_developments: [
             bullet(
@@ -455,6 +457,7 @@ export const SEED_TOPICS: SeedTopic[] = [
             url: "https://picsum.photos/seed/proactive-pm/800/450",
             source_ref: 0,
             alt: "Sample cover image for the product management and AI briefing",
+            description: "Sample placeholder image (AI product tooling coverage)",
           },
           latest_developments: [
             bullet(

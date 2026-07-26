@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  extractImageFromHtml,
+  extractImageMetaFromHtml,
   findHeroImage,
   rankSourcesByCitation,
 } from "@/lib/ai/images";
@@ -32,33 +32,47 @@ function makeSections(overrides: Partial<ReportSections> = {}): ReportSections {
   };
 }
 
-describe("extractImageFromHtml", () => {
+describe("extractImageMetaFromHtml", () => {
   it("finds og:image with property-first attribute order", () => {
     expect(
-      extractImageFromHtml(
+      extractImageMetaFromHtml(
         `<meta property="og:image" content="https://cdn.example.com/a.jpg">`,
       ),
-    ).toBe("https://cdn.example.com/a.jpg");
+    ).toEqual({ url: "https://cdn.example.com/a.jpg", alt: null });
   });
 
   it("finds og:image with content-first attribute order", () => {
     expect(
-      extractImageFromHtml(
+      extractImageMetaFromHtml(
         `<meta content="https://cdn.example.com/b.jpg" property="og:image">`,
       ),
-    ).toBe("https://cdn.example.com/b.jpg");
+    ).toEqual({ url: "https://cdn.example.com/b.jpg", alt: null });
   });
 
   it("falls back to twitter:image", () => {
     expect(
-      extractImageFromHtml(
+      extractImageMetaFromHtml(
         `<meta name="twitter:image" content="https://cdn.example.com/c.jpg">`,
       ),
-    ).toBe("https://cdn.example.com/c.jpg");
+    ).toEqual({ url: "https://cdn.example.com/c.jpg", alt: null });
+  });
+
+  it("captures the page's own image description (og:image:alt)", () => {
+    expect(
+      extractImageMetaFromHtml(
+        `<meta property="og:image" content="https://cdn.example.com/d.jpg">
+         <meta property="og:image:alt" content="Protesters gather at dusk">`,
+      ),
+    ).toEqual({
+      url: "https://cdn.example.com/d.jpg",
+      alt: "Protesters gather at dusk",
+    });
   });
 
   it("returns null when no image meta exists", () => {
-    expect(extractImageFromHtml("<html><body>no images</body></html>")).toBeNull();
+    expect(
+      extractImageMetaFromHtml("<html><body>no images</body></html>"),
+    ).toBeNull();
   });
 });
 
@@ -91,22 +105,30 @@ describe("findHeroImage", () => {
     latest_developments: [{ text: "x", source_refs: [1] }],
   });
 
-  it("returns the image of the highest-ranked source that has one", async () => {
+  it("returns the image of the highest-ranked source, using the page's alt as description", async () => {
     const hero = await findHeroImage(extracts, sections, async (url) =>
-      url.includes("b.com") ? "https://b.com/img.jpg" : null,
+      url.includes("b.com")
+        ? { url: "https://b.com/img.jpg", alt: "Crowd at product launch" }
+        : null,
     );
     expect(hero).toEqual({
       url: "https://b.com/img.jpg",
       source_ref: 1,
-      alt: "Second",
+      alt: "Crowd at product launch",
+      description: "Crowd at product launch",
     });
   });
 
-  it("falls through to lower-ranked sources when the top one has no image", async () => {
+  it("falls back to the source title when the page has no image description", async () => {
     const hero = await findHeroImage(extracts, sections, async (url) =>
-      url.includes("a.com") ? "https://a.com/img.jpg" : null,
+      url.includes("a.com") ? { url: "https://a.com/img.jpg", alt: null } : null,
     );
-    expect(hero?.source_ref).toBe(0);
+    expect(hero).toEqual({
+      url: "https://a.com/img.jpg",
+      source_ref: 0,
+      alt: "First",
+      description: null,
+    });
   });
 
   it("returns null when no source yields an image", async () => {
@@ -114,6 +136,8 @@ describe("findHeroImage", () => {
   });
 
   it("returns null for empty extracts", async () => {
-    expect(await findHeroImage([], sections, async () => "x")).toBeNull();
+    expect(
+      await findHeroImage([], sections, async () => ({ url: "x", alt: null })),
+    ).toBeNull();
   });
 });

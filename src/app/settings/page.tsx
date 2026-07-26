@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ChevronLeft, Plus } from "lucide-react";
+import { LinkPending } from "@/components/link-pending";
 import { TopicRow } from "@/components/topic-row";
 import { Button, Field, Input, Select } from "@/components/ui";
 import {
@@ -35,7 +36,10 @@ export default async function SettingsPage() {
           href="/"
           className="mb-2 inline-flex items-center gap-1 text-sm text-ink-faint hover:text-ink"
         >
-          <ChevronLeft className="size-4" aria-hidden /> Back to briefing
+          <LinkPending>
+            <ChevronLeft className="size-4" aria-hidden />
+          </LinkPending>{" "}
+          Back to briefing
         </Link>
         <h1 className="text-2xl font-bold tracking-tight">
           Profile &amp; Settings
@@ -158,7 +162,10 @@ export default async function SettingsPage() {
             href="/topics/new"
             className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm font-medium hover:bg-neutral-100"
           >
-            <Plus className="size-4" aria-hidden /> Add interest
+            <LinkPending>
+              <Plus className="size-4" aria-hidden />
+            </LinkPending>{" "}
+            Add interest
           </Link>
         </div>
 

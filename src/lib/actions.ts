@@ -39,9 +39,10 @@ function parseTopicForm(formData: FormData) {
   const raw = {
     title: String(formData.get("title") ?? ""),
     description: String(formData.get("description") ?? ""),
-    interest_areas: String(formData.get("interest_areas") ?? "")
-      .split("\n")
-      .map((line) => line.replace(/^[-•*]\s*/, "").trim())
+    // One form field per item (itemized editor); tolerate pasted bullets.
+    interest_areas: formData
+      .getAll("interest_areas")
+      .map((value) => String(value).replace(/^[-•*]\s*/, "").trim())
       .filter(Boolean),
     detail_level: String(formData.get("detail_level") ?? "standard"),
     frequency: String(formData.get("frequency") ?? "daily"),

@@ -4,6 +4,7 @@ import {
   type Extract,
   type Report,
   type ReportSections,
+  type ReportTrace,
   type ReportUsage,
   type Topic,
   type TopicMemory,
@@ -11,6 +12,7 @@ import {
 import { dedupeExtracts } from "./dedupe";
 import { extractSources } from "./extractor";
 import { findHeroImage, type ImageFetcher } from "./images";
+import type { TraceCollector } from "./trace";
 import type { UsageCollector } from "./usage";
 import type { Llm } from "./llm";
 import { updateTopicMemory } from "./memory";
@@ -27,6 +29,8 @@ export interface ReportStore {
   setStage?(reportId: string, stage: string): Promise<void>;
   /** Optional: persist OpenAI usage/cost for the run. */
   saveUsage?(reportId: string, usage: ReportUsage): Promise<void>;
+  /** Optional: persist the LLM prompt/call trace for the run. */
+  saveTrace?(reportId: string, trace: ReportTrace): Promise<void>;
   getTopicMemory(topicId: string): Promise<TopicMemory | null>;
   getLatestReadyReport(topicId: string): Promise<Report | null>;
   saveSources(reportId: string, topic: Topic, extracts: Extract[]): Promise<void>;
@@ -61,15 +65,21 @@ export async function runReportPipeline(options: {
   imageFetcher?: ImageFetcher;
   /** Collector shared with the Llm instance; persisted on completion. */
   usage?: UsageCollector;
+  /** Prompt-flow collector shared with the Llm instance; persisted on completion. */
+  trace?: TraceCollector;
 }): Promise<PipelineResult> {
-  const { llm, store, topic, reportId, imageFetcher, usage } = options;
+  const { llm, store, topic, reportId, imageFetcher, usage, trace } = options;
 
   const persistUsage = async () => {
-    if (!usage || !store.saveUsage) return;
     try {
-      await store.saveUsage(reportId, usage.snapshot());
+      if (usage && store.saveUsage) {
+        await store.saveUsage(reportId, usage.snapshot());
+      }
+      if (trace && store.saveTrace) {
+        await store.saveTrace(reportId, trace.snapshot());
+      }
     } catch (err) {
-      console.error("saving usage failed", err);
+      console.error("saving usage/trace failed", err);
     }
   };
 
@@ -173,6 +183,14 @@ export function createSupabaseReportStore(
         .update({ usage })
         .eq("id", reportId);
       if (error) throw new Error(`saving usage failed: ${error.message}`);
+    },
+
+    async saveTrace(reportId, trace) {
+      const { error } = await supabase
+        .from("reports")
+        .update({ trace })
+        .eq("id", reportId);
+      if (error) throw new Error(`saving trace failed: ${error.message}`);
     },
 
     async getTopicMemory(topicId) {

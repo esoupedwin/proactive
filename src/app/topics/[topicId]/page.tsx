@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { History, Pencil } from "lucide-react";
+import { History, Layers, Pencil, Terminal } from "lucide-react";
 import { BottomNav } from "@/components/bottom-nav";
 import { GenerateButton } from "@/components/generate-button";
 import { GenerationWatcher } from "@/components/generation-watcher";
+import { LinkPending } from "@/components/link-pending";
 import { ReportView } from "@/components/report-view";
 import { SourcesDrawer } from "@/components/sources-drawer";
 import { Badge } from "@/components/ui";
@@ -12,8 +13,9 @@ import {
   formatUsageSummary,
   isGenerationLocked,
 } from "@/lib/reports";
+import { keyEntitiesFromMemory } from "@/lib/entities";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import type { Report, Source, Topic } from "@/lib/types";
+import type { Report, Source, Topic, TopicMemory } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -66,13 +68,22 @@ export default async function TopicBriefingPage({
   const failed = newest?.status === "error" ? newest : null;
 
   let sources: Source[] = [];
+  let fallbackEntities: string[] = [];
   if (readyReport) {
-    const { data } = await supabase
-      .from("sources")
-      .select("*")
-      .eq("report_id", readyReport.id)
-      .order("created_at");
+    const [{ data }, { data: memory }] = await Promise.all([
+      supabase
+        .from("sources")
+        .select("*")
+        .eq("report_id", readyReport.id)
+        .order("created_at"),
+      supabase
+        .from("topic_memory")
+        .select("facts")
+        .eq("topic_id", topic.id)
+        .maybeSingle<Pick<TopicMemory, "facts">>(),
+    ]);
     sources = (data ?? []) as Source[];
+    fallbackEntities = keyEntitiesFromMemory(memory?.facts ?? []);
   }
 
   return (
@@ -113,7 +124,11 @@ export default async function TopicBriefingPage({
       )}
 
       {readyReport?.sections ? (
-        <ReportView sections={readyReport.sections} sources={sources} />
+        <ReportView
+          sections={readyReport.sections}
+          sources={sources}
+          fallbackEntities={fallbackEntities}
+        />
       ) : (
         !generating && (
           <div className="rounded-md border border-rule bg-neutral-50 px-4 py-8 text-center">
@@ -133,13 +148,37 @@ export default async function TopicBriefingPage({
             href={`/topics/${topic.id}/history`}
             className="inline-flex min-h-11 items-center gap-2 rounded-md border border-rule px-4 text-sm font-medium hover:bg-neutral-100"
           >
-            <History className="size-4" aria-hidden /> History
+            <LinkPending>
+              <History className="size-4" aria-hidden />
+            </LinkPending>{" "}
+            History
+          </Link>
+          <Link
+            href={`/topics/${topic.id}/extracts`}
+            className="inline-flex min-h-11 items-center gap-2 rounded-md border border-rule px-4 text-sm font-medium hover:bg-neutral-100"
+          >
+            <LinkPending>
+              <Layers className="size-4" aria-hidden />
+            </LinkPending>{" "}
+            Extracts
           </Link>
           <Link
             href={`/topics/${topic.id}/edit`}
             className="inline-flex min-h-11 items-center gap-2 rounded-md border border-rule px-4 text-sm font-medium hover:bg-neutral-100"
           >
-            <Pencil className="size-4" aria-hidden /> Edit
+            <LinkPending>
+              <Pencil className="size-4" aria-hidden />
+            </LinkPending>{" "}
+            Edit
+          </Link>
+          <Link
+            href={`/topics/${topic.id}/prompts`}
+            className="inline-flex min-h-11 items-center gap-2 rounded-md border border-rule px-4 text-sm font-medium hover:bg-neutral-100"
+          >
+            <LinkPending>
+              <Terminal className="size-4" aria-hidden />
+            </LinkPending>{" "}
+            Prompts
           </Link>
         </div>
       </div>

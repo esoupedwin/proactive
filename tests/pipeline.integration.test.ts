@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Llm, StructuredCallOptions } from "@/lib/ai/llm";
 import { runReportPipeline, type ReportStore } from "@/lib/ai/pipeline";
+import { createTraceCollector } from "@/lib/ai/trace";
 import { createUsageCollector } from "@/lib/ai/usage";
 import type {
   Extract,
@@ -182,7 +183,10 @@ describe("runReportPipeline (mocked AI)", () => {
       store,
       topic,
       reportId: "report-1",
-      imageFetcher: async () => "https://news.example.com/cover.jpg",
+      imageFetcher: async () => ({
+        url: "https://news.example.com/cover.jpg",
+        alt: "Executives unveil the new model on stage",
+      }),
     });
 
     expect(result.ok).toBe(true);
@@ -191,7 +195,8 @@ describe("runReportPipeline (mocked AI)", () => {
     expect(state.completed!.sections.hero_image).toEqual({
       url: "https://news.example.com/cover.jpg",
       source_ref: 0,
-      alt: "Vendor ships new model",
+      alt: "Executives unveil the new model on stage",
+      description: "Executives unveil the new model on stage",
     });
 
     // The two URL-duplicate extracts were merged into one persisted source.
@@ -257,6 +262,45 @@ describe("runReportPipeline (mocked AI)", () => {
     expect(savedUsage[0]).toMatchObject({
       web_search_calls: 1,
       by_model: { "gpt-5-mini": { input_tokens: 100 } },
+    });
+  });
+
+  it("persists the prompt trace on completion when a collector is provided", async () => {
+    const { store, state } = makeMemoryStore();
+    const savedTraces: unknown[] = [];
+    store.saveTrace = async (_reportId, trace) => {
+      savedTraces.push(trace);
+    };
+
+    const trace = createTraceCollector();
+    trace.record({
+      stage: "search_plan",
+      tier: "search",
+      model: "gpt-5-mini",
+      instructions: "plan",
+      input: "topic",
+      used_web_search: false,
+      web_search_calls: 0,
+      input_tokens: 10,
+      output_tokens: 5,
+      started_at: "2026-07-26T08:00:00Z",
+      duration_ms: 900,
+    });
+
+    const result = await runReportPipeline({
+      llm: makeFakeLlm(),
+      store,
+      topic,
+      reportId: "report-trace",
+      imageFetcher: async () => null,
+      trace,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(state.completed).not.toBeNull();
+    expect(savedTraces).toHaveLength(1);
+    expect(savedTraces[0]).toMatchObject({
+      calls: [{ index: 1, stage: "search_plan" }],
     });
   });
 

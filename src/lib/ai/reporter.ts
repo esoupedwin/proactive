@@ -1,3 +1,4 @@
+import { capEntityMarkers } from "../entities";
 import type {
   DetailLevel,
   Extract,
@@ -45,6 +46,7 @@ export async function generateReportDraft(
       "- Never invent URLs, quotations, dates, or claims not present in the extracts.",
       "- 'what_changed' compares against the PREVIOUS report: what is new, what narrative shifted, what earlier conclusion should be revised. For a first report, state that this is the initial briefing baseline.",
       "- cross_source_takeaway is 2-4 sentences synthesizing across all three channels.",
+      "- Highlight KEY entities inline by wrapping them in double asterisks, e.g. **Claude Opus 5**. Mark at most 2 entities per bullet — only names central to the user's topic and interest areas (companies, products, people, places). Do NOT mark every name, and do NOT use any other markdown formatting.",
       "",
       "Before finalizing, ask yourself: What did the previous report tell the user? What is genuinely new? Has the narrative changed? Is there contradictory evidence? Should an earlier conclusion be revised? Is this update important enough to surface?",
       "If nothing meaningful changed, set no_meaningful_change to true and keep the report minimal (you may leave sections empty except what_changed explaining that nothing significant happened).",
@@ -74,12 +76,20 @@ export async function generateReportDraft(
   });
 }
 
-/** Drops bullets whose source_refs point outside the extracts array (anti-hallucination guard). */
+const MAX_ENTITY_MARKS_PER_BULLET = 2;
+const MAX_ENTITY_MARKS_TAKEAWAY = 3;
+
+/**
+ * Drops bullets whose source_refs point outside the extracts array
+ * (anti-hallucination guard) and caps inline **entity** markers so an
+ * over-eager model can't bold everything.
+ */
 export function sanitizeDraft(draft: ReportDraft, sourceCount: number): ReportDraft {
   const clampBullets = (bullets: ReportDraft["latest_developments"]) =>
     bullets
       .map((b) => ({
         ...b,
+        text: capEntityMarkers(b.text, MAX_ENTITY_MARKS_PER_BULLET),
         source_refs: b.source_refs.filter((r) => r >= 0 && r < sourceCount),
       }))
       // A factual bullet with no surviving citation is dropped, unless there
@@ -91,9 +101,14 @@ export function sanitizeDraft(draft: ReportDraft, sourceCount: number): ReportDr
     latest_developments: clampBullets(draft.latest_developments),
     community_reaction: clampBullets(draft.community_reaction),
     practitioner_view: clampBullets(draft.practitioner_view),
+    cross_source_takeaway: capEntityMarkers(
+      draft.cross_source_takeaway,
+      MAX_ENTITY_MARKS_TAKEAWAY,
+    ),
     // what_changed may legitimately reference nothing (narrative comparison).
     what_changed: draft.what_changed.map((b) => ({
       ...b,
+      text: capEntityMarkers(b.text, MAX_ENTITY_MARKS_PER_BULLET),
       source_refs: b.source_refs.filter((r) => r >= 0 && r < sourceCount),
     })),
   };

@@ -30,6 +30,21 @@ describe("sanitizeDraft", () => {
     expect(clean.what_changed[0]!.source_refs).toEqual([]);
   });
 
+  it("caps inline entity markers per bullet and in the takeaway", () => {
+    const clean = sanitizeDraft(
+      {
+        ...draft,
+        latest_developments: [
+          { text: "**A** vs **B** vs **C** vs **D**", source_refs: [0] },
+        ],
+        cross_source_takeaway: "**A** **B** **C** **D**",
+      },
+      2,
+    );
+    expect(clean.latest_developments[0]!.text).toBe("**A** vs **B** vs C vs D");
+    expect(clean.cross_source_takeaway).toBe("**A** **B** **C** D");
+  });
+
   it("keeps uncited bullets when there are no sources at all", () => {
     const clean = sanitizeDraft(
       {

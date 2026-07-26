@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
+import { LinkPending } from "@/components/link-pending";
 import { ReportView } from "@/components/report-view";
 import { SourcesDrawer } from "@/components/sources-drawer";
+import { keyEntitiesFromMemory } from "@/lib/entities";
 import { formatDateTime } from "@/lib/reports";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import type { Report, Source, Topic } from "@/lib/types";
+import type { Report, Source, Topic, TopicMemory } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -29,12 +31,20 @@ export default async function ReportDetailPage({
   ]);
   if (!topic || !report || !report.sections) notFound();
 
-  const { data } = await supabase
-    .from("sources")
-    .select("*")
-    .eq("report_id", report.id)
-    .order("created_at");
+  const [{ data }, { data: memory }] = await Promise.all([
+    supabase
+      .from("sources")
+      .select("*")
+      .eq("report_id", report.id)
+      .order("created_at"),
+    supabase
+      .from("topic_memory")
+      .select("facts")
+      .eq("topic_id", topicId)
+      .maybeSingle<Pick<TopicMemory, "facts">>(),
+  ]);
   const sources = (data ?? []) as Source[];
+  const fallbackEntities = keyEntitiesFromMemory(memory?.facts ?? []);
 
   return (
     <main className="px-5 pb-16 pt-6">
@@ -43,7 +53,10 @@ export default async function ReportDetailPage({
           href={`/topics/${topicId}/history`}
           className="mb-2 inline-flex items-center gap-1 text-sm text-ink-faint hover:text-ink"
         >
-          <ChevronLeft className="size-4" aria-hidden /> History
+          <LinkPending>
+            <ChevronLeft className="size-4" aria-hidden />
+          </LinkPending>{" "}
+          History
         </Link>
         <h1 className="text-2xl font-bold leading-tight tracking-tight">
           {topic.title}
@@ -53,7 +66,11 @@ export default async function ReportDetailPage({
         </p>
       </header>
 
-      <ReportView sections={report.sections} sources={sources} />
+      <ReportView
+        sections={report.sections}
+        sources={sources}
+        fallbackEntities={fallbackEntities}
+      />
 
       <div className="mt-8 border-t border-rule pt-5">
         <SourcesDrawer sources={sources} />

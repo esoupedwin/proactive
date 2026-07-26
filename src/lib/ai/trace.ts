@@ -1,0 +1,37 @@
+import type { LlmCallTrace, ReportTrace } from "../types";
+
+/**
+ * Records the sequence of LLM calls made during one report generation so the
+ * user can inspect exactly what was asked of the model and in what order.
+ */
+
+// Keep stored traces bounded — inputs embed source dumps and can get large.
+const MAX_TEXT_CHARS = 20_000;
+
+function clip(text: string): string {
+  if (text.length <= MAX_TEXT_CHARS) return text;
+  return `${text.slice(0, MAX_TEXT_CHARS)}\n… [truncated ${text.length - MAX_TEXT_CHARS} characters]`;
+}
+
+export interface TraceCollector {
+  record(call: Omit<LlmCallTrace, "index">): void;
+  snapshot(): ReportTrace;
+}
+
+export function createTraceCollector(): TraceCollector {
+  const calls: LlmCallTrace[] = [];
+
+  return {
+    record(call) {
+      calls.push({
+        ...call,
+        index: calls.length + 1,
+        instructions: clip(call.instructions),
+        input: clip(call.input),
+      });
+    },
+    snapshot() {
+      return { calls: [...calls] };
+    },
+  };
+}

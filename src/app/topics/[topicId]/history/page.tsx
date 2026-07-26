@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
+import { LinkPending } from "@/components/link-pending";
 import { Badge } from "@/components/ui";
 import { formatDateTime, formatUsageSummary } from "@/lib/reports";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -39,7 +40,10 @@ export default async function ReportHistoryPage({
           href={`/topics/${topicId}`}
           className="mb-2 inline-flex items-center gap-1 text-sm text-ink-faint hover:text-ink"
         >
-          <ChevronLeft className="size-4" aria-hidden /> {topic.title}
+          <LinkPending>
+            <ChevronLeft className="size-4" aria-hidden />
+          </LinkPending>{" "}
+          {topic.title}
         </Link>
         <h1 className="text-2xl font-bold tracking-tight">Report history</h1>
       </header>
@@ -57,13 +61,14 @@ export default async function ReportHistoryPage({
                   href={`/topics/${topicId}/history/${report.id}`}
                   className="block hover:opacity-70"
                 >
-                  <p className="text-sm font-semibold">
+                  <p className="flex items-center gap-2 text-sm font-semibold">
                     {formatDateTime(report.created_at)}
                     {formatUsageSummary(report.usage) && (
-                      <span className="ml-2 font-normal text-ink-faint">
+                      <span className="font-normal text-ink-faint">
                         {formatUsageSummary(report.usage)}
                       </span>
                     )}
+                    <LinkPending className="size-3.5 text-ink-faint" />
                   </p>
                   <p className="mt-1 text-sm leading-relaxed text-ink-soft">
                     {report.summary ?? "Report"}

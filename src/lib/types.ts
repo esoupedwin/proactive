@@ -46,6 +46,8 @@ export interface HeroImage {
   /** Index into the report's sources — the article the image came from. */
   source_ref: number;
   alt: string;
+  /** The source page's own image description (og:image:alt), if any. */
+  description?: string | null;
 }
 
 /** Structured report body stored in reports.sections (jsonb). */
@@ -78,6 +80,28 @@ export interface ReportUsage {
   estimated_cost_usd: number | null;
 }
 
+/** One OpenAI call recorded during report generation. */
+export interface LlmCallTrace {
+  index: number;
+  /** Pipeline stage — the structured-output schema name (e.g. "report_draft"). */
+  stage: string;
+  tier: "search" | "report";
+  model: string;
+  instructions: string;
+  input: string;
+  used_web_search: boolean;
+  web_search_calls: number;
+  input_tokens: number;
+  output_tokens: number;
+  started_at: string;
+  duration_ms: number;
+  error?: string;
+}
+
+export interface ReportTrace {
+  calls: LlmCallTrace[];
+}
+
 export interface Report {
   id: string;
   topic_id: string;
@@ -88,6 +112,7 @@ export interface Report {
   /** Current pipeline stage while status is 'generating'. */
   stage: string | null;
   usage: ReportUsage | null;
+  trace: ReportTrace | null;
   error: string | null;
   created_at: string;
   completed_at: string | null;

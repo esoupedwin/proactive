@@ -83,6 +83,21 @@ export function formatUsageSummary(usage: ReportUsage | null | undefined): strin
   return parts.join(" · ");
 }
 
+/** 1-based pagination bounds for a Supabase .range() query. */
+export function paginate(
+  totalCount: number,
+  requestedPage: number,
+  pageSize: number,
+): { page: number; totalPages: number; from: number; to: number } {
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const page = Math.min(
+    Math.max(1, Math.floor(requestedPage) || 1),
+    totalPages,
+  );
+  const from = (page - 1) * pageSize;
+  return { page, totalPages, from, to: from + pageSize - 1 };
+}
+
 /** Compact relative age, e.g. "3h ago". */
 export function formatRelativeAge(
   iso: string | null | undefined,

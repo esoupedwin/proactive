@@ -4,6 +4,7 @@ import {
   createSupabaseReportStore,
   runReportPipeline,
 } from "@/lib/ai/pipeline";
+import { createTraceCollector } from "@/lib/ai/trace";
 import { createUsageCollector } from "@/lib/ai/usage";
 import { isGenerationLocked } from "@/lib/reports";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -67,12 +68,14 @@ export async function POST(
   }
 
   const usage = createUsageCollector();
+  const trace = createTraceCollector();
   const result = await runReportPipeline({
-    llm: createOpenAiLlm(usage),
+    llm: createOpenAiLlm(usage, trace),
     store: createSupabaseReportStore(supabase),
     topic,
     reportId: report.id,
     usage,
+    trace,
   });
 
   if (!result.ok) {

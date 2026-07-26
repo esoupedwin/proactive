@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { deleteTopic, toggleTopicStatus } from "@/lib/actions";
 import type { Topic } from "@/lib/types";
+import { LinkPending } from "./link-pending";
 import { Badge, Spinner } from "./ui";
 
 /** One row in the Manage List: actions + expandable configuration details. */
@@ -66,14 +67,18 @@ export function TopicRow({ topic }: { topic: Topic }) {
               aria-label={`View ${topic.title}`}
               className={iconButton}
             >
-              <Eye className="size-4" aria-hidden />
+              <LinkPending>
+                <Eye className="size-4" aria-hidden />
+              </LinkPending>
             </Link>
             <Link
               href={`/topics/${topic.id}/edit`}
               aria-label={`Edit ${topic.title}`}
               className={iconButton}
             >
-              <Pencil className="size-4" aria-hidden />
+              <LinkPending>
+                <Pencil className="size-4" aria-hidden />
+              </LinkPending>
             </Link>
             <button
               onClick={onToggleStatus}

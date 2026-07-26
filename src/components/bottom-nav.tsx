@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Settings } from "lucide-react";
+import { LinkPending } from "./link-pending";
 
 export interface NavTopic {
   id: string;
@@ -32,7 +33,9 @@ export function BottomNav({
           aria-label="Settings"
           className="rounded-md p-2.5 hover:bg-neutral-100"
         >
-          <Settings className="size-5" aria-hidden />
+          <LinkPending className="size-5">
+            <Settings className="size-5" aria-hidden />
+          </LinkPending>
         </Link>
 
         <div className="flex min-w-0 flex-1 items-center justify-end gap-1">
@@ -42,7 +45,9 @@ export function BottomNav({
               aria-label={`Previous topic: ${prev.title}`}
               className="rounded-md p-2.5 hover:bg-neutral-100"
             >
-              <ChevronLeft className="size-5" aria-hidden />
+              <LinkPending className="size-5">
+                <ChevronLeft className="size-5" aria-hidden />
+              </LinkPending>
             </Link>
           ) : (
             <span className="p-2.5 text-rule">
@@ -60,7 +65,9 @@ export function BottomNav({
               aria-label={`Next topic: ${next.title}`}
               className="rounded-md p-2.5 hover:bg-neutral-100"
             >
-              <ChevronRight className="size-5" aria-hidden />
+              <LinkPending className="size-5">
+                <ChevronRight className="size-5" aria-hidden />
+              </LinkPending>
             </Link>
           ) : (
             <span className="p-2.5 text-rule">

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { formatElapsed, isGenerationLocked, isTopicDue } from "@/lib/reports";
+import {
+  formatElapsed,
+  isGenerationLocked,
+  isTopicDue,
+  paginate,
+} from "@/lib/reports";
 import type { Topic } from "@/lib/types";
 
 const NOW = new Date("2026-07-25T08:00:00Z");
@@ -68,6 +73,23 @@ describe("formatElapsed", () => {
 
   it("clamps negative values", () => {
     expect(formatElapsed(-50)).toBe("0:00.000");
+  });
+});
+
+describe("paginate", () => {
+  it("computes 1-based page bounds", () => {
+    expect(paginate(25, 1, 10)).toEqual({ page: 1, totalPages: 3, from: 0, to: 9 });
+    expect(paginate(25, 3, 10)).toEqual({ page: 3, totalPages: 3, from: 20, to: 29 });
+  });
+
+  it("clamps out-of-range and invalid pages", () => {
+    expect(paginate(25, 99, 10).page).toBe(3);
+    expect(paginate(25, 0, 10).page).toBe(1);
+    expect(paginate(25, Number.NaN, 10).page).toBe(1);
+  });
+
+  it("handles empty result sets", () => {
+    expect(paginate(0, 1, 10)).toEqual({ page: 1, totalPages: 1, from: 0, to: 9 });
   });
 });
 
