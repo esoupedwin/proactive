@@ -15,6 +15,8 @@ Not a news reader — a personal research analyst.
 
 ## How it works
 
+> Full step-by-step walkthrough: [docs/pipeline.md](docs/pipeline.md)
+
 Per topic, an update runs a six-module pipeline (`src/lib/ai/`):
 
 1. **Planner** (`planner.ts`) — turns the topic description + interest areas into search queries.
