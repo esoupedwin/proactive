@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { stripEntityMarkers } from "../../entities";
 import type {
   MentorLevel,
   MentorMemoryData,
@@ -8,6 +7,7 @@ import type {
   Topic,
 } from "../../types";
 import type { Llm } from "../llm";
+import { plainReportText } from "./report-text";
 
 /**
  * Mentor — the first "expert": reads a generated report and teaches the user
@@ -94,17 +94,6 @@ export function mergeTaughtConcepts(
     .sort((a, b) => b.last_taught_at.localeCompare(a.last_taught_at))
     .slice(0, MAX_TAUGHT_CONCEPTS);
   return { taught };
-}
-
-/** Flattens report sections into plain teaching material. */
-function plainReportText(sections: ReportSections): string {
-  const bullets = [
-    ...sections.latest_developments,
-    ...sections.community_reaction,
-    ...sections.practitioner_view,
-    ...sections.what_changed,
-  ].map((b) => `- ${stripEntityMarkers(b.text)}`);
-  return [stripEntityMarkers(sections.cross_source_takeaway), ...bullets].join("\n");
 }
 
 export async function runMentor(

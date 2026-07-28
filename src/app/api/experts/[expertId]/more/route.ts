@@ -47,8 +47,14 @@ export async function POST(
   if (!expert || !output) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
+  if (expert.kind !== "mentor") {
+    return NextResponse.json(
+      { error: "Only Mentor supports deeper explanations." },
+      { status: 400 },
+    );
+  }
 
-  const tip = output.output.tips.find((t) => t.id === body.tipId);
+  const tip = (output.output.tips ?? []).find((t) => t.id === body.tipId);
   if (!tip) {
     return NextResponse.json({ error: "Tip not found" }, { status: 404 });
   }
@@ -74,7 +80,7 @@ export async function POST(
       tip.tip,
     );
 
-    const tips = output.output.tips.map((t) =>
+    const tips = (output.output.tips ?? []).map((t) =>
       t.id === tip.id ? { ...t, more } : t,
     );
     await supabase

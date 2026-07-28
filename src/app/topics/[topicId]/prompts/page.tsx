@@ -17,6 +17,9 @@ const STAGE_LABEL: Record<string, string> = {
   extraction_result: "Extractor — structure the found sources",
   report_draft: "Update reporter — write the briefing",
   memory_update: "Memory updater — fold report into topic memory",
+  mentor_tips: "Mentor — teaching tips",
+  mentor_more: "Mentor — deeper explanation",
+  analyst_analysis: "Analyst — interpret the report",
 };
 
 /** The OpenAI prompt flow behind the topic's latest report. */

@@ -2,10 +2,16 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { Bot, Check, RotateCcw } from "lucide-react";
+import { Bot, Check, Landmark, RotateCcw } from "lucide-react";
 import { mentorTipFeedback } from "@/lib/actions";
-import type { Expert, ExpertOutput, MentorTip } from "@/lib/types";
-import { Spinner } from "./ui";
+import type {
+  AnalystAnalysis,
+  Expert,
+  ExpertOutput,
+  MentorTip,
+  ScenarioLikelihood,
+} from "@/lib/types";
+import { Badge, Spinner } from "./ui";
 
 export interface ExpertPanelItem {
   expert: Expert;
@@ -44,6 +50,7 @@ function ExpertCard({
   output: ExpertOutput | null;
   reportId: string;
 }) {
+  const isAnalyst = expert.kind === "analyst";
   return (
     <div className="rounded-md border border-rule">
       <div className="flex items-center gap-3 border-b border-rule px-4 py-3">
@@ -51,36 +58,145 @@ function ExpertCard({
           aria-hidden
           className="flex size-9 shrink-0 items-center justify-center rounded-full border border-rule bg-neutral-50"
         >
-          <Bot className="size-5" />
+          {isAnalyst ? <Landmark className="size-5" /> : <Bot className="size-5" />}
         </span>
         <div className="min-w-0">
           <p className="text-sm font-bold">{expert.name}</p>
-          <p className="text-xs text-ink-faint">
-            Helps you understand key concepts ·{" "}
-            {expert.config.level ?? "basic"} level
+          <p className="truncate text-xs text-ink-faint">
+            {isAnalyst
+              ? (expert.config.focus ?? "Neutral, evidence-based analysis")
+              : `Helps you understand key concepts · ${expert.config.level ?? "basic"} level`}
           </p>
         </div>
       </div>
 
       {output ? (
-        <ul className="divide-y divide-rule">
-          {output.output.tips.map((tip) => (
-            <TipCard
-              key={tip.id}
-              tip={tip}
-              expertId={expert.id}
-              outputId={output.id}
-            />
-          ))}
-          {output.output.tips.length === 0 && (
-            <li className="px-4 py-4 text-sm text-ink-faint">
-              Nothing new to explain in this report — you know this ground
-              already.
-            </li>
-          )}
-        </ul>
+        isAnalyst ? (
+          output.output.analysis ? (
+            <AnalystBody analysis={output.output.analysis} />
+          ) : (
+            <p className="px-4 py-4 text-sm text-ink-faint">
+              No analysis recorded for this report.
+            </p>
+          )
+        ) : (
+          <ul className="divide-y divide-rule">
+            {(output.output.tips ?? []).map((tip) => (
+              <TipCard
+                key={tip.id}
+                tip={tip}
+                expertId={expert.id}
+                outputId={output.id}
+              />
+            ))}
+            {(output.output.tips ?? []).length === 0 && (
+              <li className="px-4 py-4 text-sm text-ink-faint">
+                Nothing new to explain in this report — you know this ground
+                already.
+              </li>
+            )}
+          </ul>
+        )
       ) : (
         <RunExpertPrompt expert={expert} reportId={reportId} />
+      )}
+    </div>
+  );
+}
+
+const LIKELIHOOD_TONE: Record<
+  ScenarioLikelihood,
+  "active" | "neutral" | "paused"
+> = {
+  likely: "active",
+  possible: "neutral",
+  unlikely: "paused",
+};
+
+function AnalystBody({ analysis }: { analysis: AnalystAnalysis }) {
+  return (
+    <div className="space-y-4 px-4 py-4 text-sm leading-relaxed">
+      <section aria-label="Assessment">
+        <h3 className="mb-1 text-xs font-bold uppercase tracking-wide text-ink-faint">
+          Assessment
+        </h3>
+        <p>{analysis.assessment}</p>
+      </section>
+
+      {analysis.why_it_matters.length > 0 && (
+        <section aria-label="Why it matters">
+          <h3 className="mb-1 text-xs font-bold uppercase tracking-wide text-ink-faint">
+            Why it matters
+          </h3>
+          <ul className="space-y-1.5">
+            {analysis.why_it_matters.map((point, i) => (
+              <li key={i} className="flex gap-2">
+                <span aria-hidden className="select-none text-ink-faint">
+                  •
+                </span>
+                <span>{point}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {analysis.outlook.length > 0 && (
+        <section aria-label="Outlook">
+          <h3 className="mb-1.5 text-xs font-bold uppercase tracking-wide text-ink-faint">
+            Outlook
+          </h3>
+          <ul className="space-y-2.5">
+            {analysis.outlook.map((item, i) => (
+              <li key={i}>
+                <p className="flex flex-wrap items-baseline gap-1.5">
+                  <Badge tone={LIKELIHOOD_TONE[item.likelihood]}>
+                    {item.likelihood}
+                  </Badge>
+                  <span>{item.scenario}</span>
+                </p>
+                {item.watch_for.length > 0 && (
+                  <p className="mt-0.5 text-xs text-ink-faint">
+                    Watch for: {item.watch_for.join(" · ")}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {analysis.scenario_updates.length > 0 && (
+        <section aria-label="Scenario updates">
+          <h3 className="mb-1 text-xs font-bold uppercase tracking-wide text-ink-faint">
+            Prior calls, revisited
+          </h3>
+          <ul className="space-y-1.5">
+            {analysis.scenario_updates.map((update, i) => (
+              <li key={i} className="text-xs leading-relaxed">
+                <Badge
+                  tone={
+                    update.status === "strengthened"
+                      ? "active"
+                      : update.status === "weakened"
+                        ? "paused"
+                        : "neutral"
+                  }
+                >
+                  {update.status}
+                </Badge>{" "}
+                <span className="text-ink-soft">{update.scenario}</span> —{" "}
+                {update.note}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {analysis.caveats && (
+        <p className="rounded-md bg-neutral-50 px-3 py-2 text-xs leading-relaxed text-ink-soft">
+          <span className="font-semibold">Caveats:</span> {analysis.caveats}
+        </p>
       )}
     </div>
   );

@@ -24,6 +24,7 @@ const STAGE_LABEL: Record<string, string> = {
   memory_update: "Memory updater",
   mentor_tips: "Mentor — teaching tips",
   mentor_more: "Mentor — deeper explanation",
+  analyst_analysis: "Analyst — interpret the report",
 };
 
 /** Per-step token and cost breakdown for the topic's latest report. */

@@ -198,6 +198,53 @@ export async function addMentorExpert(
   revalidatePath(`/topics/${topicId}`);
 }
 
+export async function addAnalystExpert(
+  topicId: string,
+  formData: FormData,
+): Promise<void> {
+  const { supabase, user } = await requireUser();
+
+  const focus = String(formData.get("focus") ?? "").trim();
+
+  await supabase.from("experts").insert({
+    topic_id: topicId,
+    user_id: user.id,
+    kind: "analyst",
+    name: "Analyst",
+    status: "active",
+    // Empty focus falls back to the topic's own description at run time.
+    config: focus ? { focus } : {},
+  });
+
+  revalidatePath(`/topics/${topicId}/experts`);
+  revalidatePath(`/topics/${topicId}`);
+}
+
+export async function updateExpertFocus(
+  expertId: string,
+  formData: FormData,
+): Promise<void> {
+  const { supabase } = await requireUser();
+
+  const { data: expert } = await supabase
+    .from("experts")
+    .select("topic_id, config")
+    .eq("id", expertId)
+    .maybeSingle<Pick<Expert, "topic_id" | "config">>();
+  if (!expert) return;
+
+  const focus = String(formData.get("focus") ?? "").trim();
+  await supabase
+    .from("experts")
+    .update({
+      config: { ...expert.config, focus: focus || undefined },
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", expertId);
+
+  revalidatePath(`/topics/${expert.topic_id}/experts`);
+}
+
 export async function updateExpertLevel(
   expertId: string,
   formData: FormData,

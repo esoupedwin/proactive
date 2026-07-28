@@ -1,12 +1,17 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
+  AnalystMemoryData,
   Expert,
+  ExpertMemoryData,
   ExpertOutput,
+  ExpertOutputData,
   MentorMemoryData,
   ReportSections,
+  Source,
   Topic,
 } from "../../types";
 import type { Llm } from "../llm";
+import { runAnalyst } from "./analyst";
 import { runMentor } from "./mentor";
 
 /**
@@ -29,22 +34,66 @@ export async function runExpertOnReport(options: {
     .maybeSingle<{ sections: ReportSections | null }>();
   if (!report?.sections) return null;
 
-  if (expert.kind !== "mentor") return null;
-
   const { data: memoryRow } = await supabase
     .from("expert_memory")
     .select("memory")
     .eq("expert_id", expert.id)
-    .maybeSingle<{ memory: MentorMemoryData }>();
-  const memory: MentorMemoryData = memoryRow?.memory ?? { taught: [] };
+    .maybeSingle<{ memory: ExpertMemoryData }>();
 
-  const { tips, memory: newMemory } = await runMentor(
-    llm,
-    topic,
-    report.sections,
-    expert.config.level ?? "basic",
-    memory,
-  );
+  let output: ExpertOutputData;
+  let newMemory: ExpertMemoryData;
+
+  switch (expert.kind) {
+    case "mentor": {
+      const memory: MentorMemoryData = {
+        taught: memoryRow?.memory?.taught ?? [],
+      };
+      const result = await runMentor(
+        llm,
+        topic,
+        report.sections,
+        expert.config.level ?? "basic",
+        memory,
+      );
+      output = { tips: result.tips };
+      newMemory = result.memory;
+      break;
+    }
+
+    case "analyst": {
+      const memory: AnalystMemoryData = {
+        scenarios: memoryRow?.memory?.scenarios ?? [],
+      };
+      // The analyst also sees the report's sources so it can weigh
+      // reported fact vs community sentiment vs interpretation.
+      const { data: sourceRows } = await supabase
+        .from("sources")
+        .select("source_type, gist, novelty, contradiction")
+        .eq("report_id", reportId);
+      const extracts = ((sourceRows ?? []) as Source[]).map((s) => ({
+        source_type: s.source_type,
+        gist: s.gist,
+        novelty: s.novelty ?? "",
+        contradiction: s.contradiction ?? "",
+      }));
+
+      const result = await runAnalyst(
+        llm,
+        topic,
+        report.sections,
+        expert.config.focus?.trim() ||
+          `${topic.title} — ${topic.description}`,
+        memory,
+        extracts,
+      );
+      output = { analysis: result.analysis };
+      newMemory = result.memory;
+      break;
+    }
+
+    default:
+      return null;
+  }
 
   const { data: outputRow, error } = await supabase
     .from("expert_outputs")
@@ -55,7 +104,7 @@ export async function runExpertOnReport(options: {
         topic_id: topic.id,
         user_id: expert.user_id,
         kind: expert.kind,
-        output: { tips },
+        output,
       },
       { onConflict: "expert_id,report_id" },
     )

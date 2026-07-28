@@ -137,12 +137,14 @@ export interface Source {
 
 // ---- Experts ---------------------------------------------------------------
 
-export type ExpertKind = "mentor";
+export type ExpertKind = "mentor" | "analyst";
 export type MentorLevel = "basic" | "intermediate" | "advanced";
 
 export interface ExpertConfig {
   /** Mentor: how basic or advanced explanations should be. */
   level?: MentorLevel;
+  /** Analyst: its specialization, e.g. "Malaysia's domestic politics, governance, power dynamics, and society". */
+  focus?: string;
 }
 
 /** An LLM module attached to a topic that reads reports and adds output. */
@@ -166,6 +168,35 @@ export interface MentorTip {
   more?: string | null;
 }
 
+export type ScenarioLikelihood = "likely" | "possible" | "unlikely";
+
+export interface AnalystOutlook {
+  scenario: string;
+  likelihood: ScenarioLikelihood;
+  /** Concrete observable indicators that would confirm or kill the scenario. */
+  watch_for: string[];
+}
+
+export interface AnalystScenarioUpdate {
+  scenario: string;
+  status: "strengthened" | "weakened" | "resolved";
+  note: string;
+}
+
+export interface AnalystAnalysis {
+  assessment: string;
+  why_it_matters: string[];
+  outlook: AnalystOutlook[];
+  scenario_updates: AnalystScenarioUpdate[];
+  caveats: string;
+}
+
+/** Union payload — which fields are present depends on the expert kind. */
+export interface ExpertOutputData {
+  tips?: MentorTip[];
+  analysis?: AnalystAnalysis;
+}
+
 export interface ExpertOutput {
   id: string;
   expert_id: string;
@@ -173,7 +204,7 @@ export interface ExpertOutput {
   topic_id: string;
   user_id: string;
   kind: ExpertKind;
-  output: { tips: MentorTip[] };
+  output: ExpertOutputData;
   created_at: string;
 }
 
@@ -188,10 +219,31 @@ export interface MentorMemoryData {
   taught: TaughtConcept[];
 }
 
+/** The analyst's own track record: every forward scenario it has issued. */
+export interface TrackedScenario {
+  id: string;
+  scenario: string;
+  likelihood: ScenarioLikelihood;
+  status: "open" | "strengthened" | "weakened" | "resolved";
+  made_at: string;
+  last_reviewed_at: string;
+  note?: string;
+}
+
+export interface AnalystMemoryData {
+  scenarios: TrackedScenario[];
+}
+
+/** Union payload — which fields are present depends on the expert kind. */
+export interface ExpertMemoryData {
+  taught?: TaughtConcept[];
+  scenarios?: TrackedScenario[];
+}
+
 export interface ExpertMemory {
   expert_id: string;
   user_id: string;
-  memory: MentorMemoryData;
+  memory: ExpertMemoryData;
   updated_at: string;
 }
 

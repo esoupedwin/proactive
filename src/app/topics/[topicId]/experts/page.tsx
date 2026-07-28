@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Bot, ChevronLeft } from "lucide-react";
+import { Bot, ChevronLeft, Landmark } from "lucide-react";
 import { LinkPending } from "@/components/link-pending";
-import { Badge, Button, Field, Select } from "@/components/ui";
+import { Badge, Button, Field, Select, Textarea } from "@/components/ui";
 import {
+  addAnalystExpert,
   addMentorExpert,
   deleteExpert,
   toggleExpertStatus,
+  updateExpertFocus,
   updateExpertLevel,
 } from "@/lib/actions";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -43,8 +45,10 @@ export default async function TopicExpertsPage({
     .order("created_at");
   const experts = (data ?? []) as Expert[];
   const mentor = experts.find((e) => e.kind === "mentor");
+  const analyst = experts.find((e) => e.kind === "analyst");
 
   const boundAddMentor = addMentorExpert.bind(null, topicId);
+  const boundAddAnalyst = addAnalystExpert.bind(null, topicId);
 
   return (
     <main className="px-5 pb-16 pt-6">
@@ -170,9 +174,110 @@ export default async function TopicExpertsPage({
         </section>
       )}
 
+      {analyst ? (
+        <section aria-label="Analyst" className="mt-6 rounded-md border border-rule">
+          <div className="flex items-center gap-3 border-b border-rule px-4 py-3">
+            <span
+              aria-hidden
+              className="flex size-9 shrink-0 items-center justify-center rounded-full border border-rule bg-neutral-50"
+            >
+              <Landmark className="size-5" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold">Analyst</p>
+              <p className="text-xs text-ink-faint">
+                Neutral, evidence-based analysis: what&apos;s happening, why it
+                matters, what may happen next. Tracks its own forward calls.
+              </p>
+            </div>
+            <Badge tone={analyst.status === "active" ? "active" : "paused"}>
+              {analyst.status}
+            </Badge>
+          </div>
+
+          <div className="space-y-4 px-4 py-4">
+            <form
+              action={updateExpertFocus.bind(null, analyst.id)}
+              className="space-y-3"
+            >
+              <Field
+                label="Specialization"
+                htmlFor="focus"
+                hint="What the analyst focuses on. Leave empty to analyze the topic broadly."
+              >
+                <Textarea
+                  id="focus"
+                  name="focus"
+                  rows={3}
+                  defaultValue={analyst.config.focus ?? ""}
+                  placeholder="e.g. Malaysia's domestic politics, governance, power dynamics, and society"
+                />
+              </Field>
+              <Button type="submit" variant="outline">
+                Save specialization
+              </Button>
+            </form>
+
+            <div className="flex flex-wrap gap-2 border-t border-rule pt-4">
+              <form action={toggleExpertStatus.bind(null, analyst.id)}>
+                <Button type="submit" variant="outline">
+                  {analyst.status === "active" ? "Pause Analyst" : "Resume Analyst"}
+                </Button>
+              </form>
+              <form action={deleteExpert.bind(null, analyst.id)}>
+                <Button type="submit" variant="danger">
+                  Remove Analyst
+                </Button>
+              </form>
+            </div>
+            <p className="text-xs text-ink-faint">
+              Removing Analyst also deletes its tracked scenarios for this
+              topic.
+            </p>
+          </div>
+        </section>
+      ) : (
+        <section
+          aria-label="Add Analyst"
+          className="mt-6 rounded-md border border-rule"
+        >
+          <div className="flex items-center gap-3 border-b border-rule px-4 py-3">
+            <span
+              aria-hidden
+              className="flex size-9 shrink-0 items-center justify-center rounded-full border border-rule bg-neutral-50"
+            >
+              <Landmark className="size-5" />
+            </span>
+            <div>
+              <p className="text-sm font-bold">Analyst</p>
+              <p className="text-xs text-ink-faint">
+                Neutral, evidence-based analysis of each report: what&apos;s
+                happening, why it matters, what may happen next — with forward
+                scenarios it revisits over time.
+              </p>
+            </div>
+          </div>
+          <form action={boundAddAnalyst} className="space-y-3 px-4 py-4">
+            <Field
+              label="Specialization"
+              htmlFor="analyst_focus"
+              hint="Optional — defaults to the topic itself. You can change this anytime."
+            >
+              <Textarea
+                id="analyst_focus"
+                name="focus"
+                rows={3}
+                placeholder="e.g. Malaysia's domestic politics, governance, power dynamics, and society"
+              />
+            </Field>
+            <Button type="submit">Add Analyst to this topic</Button>
+          </form>
+        </section>
+      )}
+
       <p className="mt-6 text-xs leading-relaxed text-ink-faint">
-        More expert types are coming — each reads the report and contributes
-        its own section, like Mentor does today.
+        Experts read each generated report and contribute their own section
+        below it. More kinds are coming.
       </p>
     </main>
   );
