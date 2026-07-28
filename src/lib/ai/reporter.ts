@@ -51,28 +51,24 @@ export async function generateReportDraft(
       "Before finalizing, ask yourself: What did the previous report tell the user? What is genuinely new? Has the narrative changed? Is there contradictory evidence? Should an earlier conclusion be revised? Is this update important enough to surface?",
       "If nothing meaningful changed, set no_meaningful_change to true and keep the report minimal (you may leave sections empty except what_changed explaining that nothing significant happened).",
     ].join("\n"),
-    input: JSON.stringify(
-      {
-        now: today,
-        topic: {
-          title: topic.title,
-          goal: topic.description,
-          interest_areas: topic.interest_areas,
-        },
-        // Index in this array == source_refs index.
-        sources: extracts.map((e, i) => ({ index: i, ...e })),
-        previous_report: previousReport?.sections ?? null,
-        previous_report_date: previousReport?.created_at ?? null,
-        memory: {
-          already_reported: memory.reported_developments.map((d) => d.text),
-          themes: memory.themes,
-          facts: memory.facts,
-          open_questions: memory.open_questions,
-        },
+    input: JSON.stringify({
+      now: today,
+      topic: {
+        title: topic.title,
+        goal: topic.description,
+        interest_areas: topic.interest_areas,
       },
-      null,
-      2,
-    ),
+      // Index in this array == source_refs index.
+      sources: extracts.map((e, i) => ({ index: i, ...e })),
+      previous_report: previousReport?.sections ?? null,
+      previous_report_date: previousReport?.created_at ?? null,
+      memory: {
+        already_reported: memory.reported_developments.map((d) => d.text),
+        themes: memory.themes,
+        facts: memory.facts,
+        open_questions: memory.open_questions,
+      },
+    }),
   });
 }
 

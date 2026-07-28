@@ -55,7 +55,7 @@ describe("planFollowupQueries", () => {
     expect(result).toEqual(["generic reddit query"]);
   });
 
-  it("merges targeted queries with one broad fallback query, deduped", async () => {
+  it("caps at one targeted query plus one broad fallback (one search per channel)", async () => {
     const result = await planFollowupQueries(
       llmReturning(["Model X reaction", "Model X vs Claude"]),
       topic,
@@ -63,11 +63,18 @@ describe("planFollowupQueries", () => {
       newsFindings,
       ["generic reddit query", "second fallback ignored"],
     );
-    expect(result).toEqual([
-      "Model X reaction",
-      "Model X vs Claude",
-      "generic reddit query",
-    ]);
+    expect(result).toEqual(["Model X reaction", "generic reddit query"]);
+  });
+
+  it("dedupes when the targeted query repeats the fallback", async () => {
+    const result = await planFollowupQueries(
+      llmReturning(["generic reddit query"]),
+      topic,
+      "reddit",
+      newsFindings,
+      ["generic reddit query"],
+    );
+    expect(result).toEqual(["generic reddit query"]);
   });
 
   it("falls back to planned queries when the LLM call fails", async () => {

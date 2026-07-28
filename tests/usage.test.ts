@@ -1,10 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
   createUsageCollector,
+  estimateCallCostUsd,
   estimateCostUsd,
   pricingFor,
 } from "@/lib/ai/usage";
-import { formatTokens, formatUsageSummary, formatUsd } from "@/lib/reports";
+import {
+  formatTokens,
+  formatUsageSummary,
+  formatUsd,
+  formatUsdDetailed,
+} from "@/lib/reports";
 
 describe("usage collector", () => {
   it("aggregates calls, tokens, and web-search calls per model", () => {
@@ -70,6 +76,45 @@ describe("estimateCostUsd", () => {
         0,
       ),
     ).toBeNull();
+  });
+});
+
+describe("estimateCallCostUsd", () => {
+  it("prices one call from its own model and tokens", () => {
+    // 10k input @ $1.25/M + 1k output @ $10/M + 2 searches @ $0.01
+    expect(estimateCallCostUsd("gpt-5", 10_000, 1_000, 2)).toBeCloseTo(
+      0.0125 + 0.01 + 0.02,
+      6,
+    );
+  });
+
+  it("keeps sub-cent precision instead of rounding to zero", () => {
+    const cost = estimateCallCostUsd("gpt-5-nano", 500, 100)!;
+    expect(cost).toBeGreaterThan(0);
+    expect(cost).toBeLessThan(0.001);
+  });
+
+  it("is null for unknown models", () => {
+    expect(estimateCallCostUsd("mystery-model", 1000, 100)).toBeNull();
+  });
+
+  it("resolves dated model ids to the base model's pricing", () => {
+    expect(estimateCallCostUsd("gpt-5-mini-2026-03-17", 1_000_000, 0)).toBe(
+      estimateCallCostUsd("gpt-5-mini", 1_000_000, 0),
+    );
+  });
+});
+
+describe("formatUsdDetailed", () => {
+  it("scales decimals to the magnitude", () => {
+    expect(formatUsdDetailed(0.03)).toBe("$0.03");
+    expect(formatUsdDetailed(0.0021)).toBe("$0.002");
+    expect(formatUsdDetailed(0.00042)).toBe("$0.0004");
+    expect(formatUsdDetailed(0)).toBe("$0");
+  });
+
+  it("renders unknown pricing as a dash", () => {
+    expect(formatUsdDetailed(null)).toBe("—");
   });
 });
 

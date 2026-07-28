@@ -16,6 +16,9 @@ export interface SeekOutput {
   sources: FoundSource[];
 }
 
+/** More queries than this per channel tempts the model into extra searches. */
+const MAX_QUERIES_PER_CHANNEL = 2;
+
 /**
  * Information seeker — runs a web search per channel and returns the sources
  * found. News first, then Reddit, then Medium (sequential by design so the
@@ -37,7 +40,10 @@ export async function seekChannel(
     instructions: [
       "You are the information seeker for a personal research companion.",
       CHANNEL_GUIDANCE[channel],
-      "Use the web search tool for each query. Return up to 6 distinct, genuinely relevant sources.",
+      // Each web_search call is billed separately and pulls the fetched pages
+      // in as input tokens, so one well-formed search per channel.
+      "Make AT MOST ONE web search call. If several queries are supplied, combine them into a single well-formed search that covers them.",
+      "Return up to 6 distinct, genuinely relevant sources from that search.",
       "Only include sources you actually found via search. Never invent URLs, titles, or dates.",
       "Snippets must reflect what the source actually says.",
     ].join("\n"),
@@ -46,7 +52,7 @@ export async function seekChannel(
       `Topic: ${topic.title}`,
       `User goal: ${topic.description}`,
       `Interest areas: ${topic.interest_areas.join("; ")}`,
-      `Queries to run: ${queries.map((q) => `"${q}"`).join(", ")}`,
+      `Queries to cover in one search: ${queries.slice(0, MAX_QUERIES_PER_CHANNEL).map((q) => `"${q}"`).join(", ")}`,
     ].join("\n"),
   });
 

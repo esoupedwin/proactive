@@ -37,20 +37,16 @@ export async function extractSources(
       "Drop sources that are clearly irrelevant to the topic by omitting them.",
       "Keep every field grounded in the provided snippet/title — never invent facts, dates, or URLs.",
     ].join("\n"),
-    input: JSON.stringify(
-      {
-        topic: {
-          title: topic.title,
-          goal: topic.description,
-          interest_areas: topic.interest_areas,
-        },
-        already_reported_developments: alreadyReported || "(nothing yet)",
-        known_facts: memory.facts.map((f) => f.fact),
-        found_sources: flat,
+    input: JSON.stringify({
+      topic: {
+        title: topic.title,
+        goal: topic.description,
+        interest_areas: topic.interest_areas,
       },
-      null,
-      2,
-    ),
+      already_reported_developments: alreadyReported || "(nothing yet)",
+      known_facts: memory.facts.map((f) => f.fact),
+      found_sources: flat,
+    }),
   });
 
   return result.extracts;

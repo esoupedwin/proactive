@@ -52,7 +52,12 @@ cp .env.example .env.local
 
 ### 3. OpenAI
 
-Set `OPENAI_API_KEY` in `.env.local`. Models are configurable via `OPENAI_SEARCH_MODEL` (search/extraction, needs web-search tool support) and `OPENAI_REPORT_MODEL` (synthesis).
+Set `OPENAI_API_KEY` in `.env.local`. Two model tiers are configurable:
+
+- `OPENAI_SEARCH_MODEL` — planning, web search (needs web-search tool support), extraction, memory updates, and experts. Everything mechanical.
+- `OPENAI_REPORT_MODEL` — writing the briefing itself. The only call whose output the user reads directly, so it gets the stronger model.
+
+Costs are estimated from a price table in `src/lib/ai/usage.ts`; override or extend it without code changes via `OPENAI_PRICING_JSON`, e.g. `{"gpt-5-mini":{"input":0.25,"output":2}}` (USD per 1M tokens). Per-step tokens and cost for any report are visible under the topic's **Tokens** button.
 
 ### 4. Run
 

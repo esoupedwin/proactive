@@ -50,6 +50,25 @@ export function pricingFor(
   return best;
 }
 
+/**
+ * Cost of a single call. Null when the model's pricing is unknown.
+ * Kept at 6dp so small per-step figures don't collapse to zero.
+ */
+export function estimateCallCostUsd(
+  model: string,
+  inputTokens: number,
+  outputTokens: number,
+  webSearchCalls = 0,
+): number | null {
+  const price = pricingFor(model);
+  if (!price) return null;
+  const cost =
+    (inputTokens / 1_000_000) * price.input +
+    (outputTokens / 1_000_000) * price.output +
+    webSearchCalls * WEB_SEARCH_COST_PER_CALL;
+  return Math.round(cost * 1_000_000) / 1_000_000;
+}
+
 /** Null if any used model has no known pricing (tokens still recorded). */
 export function estimateCostUsd(
   byModel: Record<string, ModelUsage>,

@@ -71,19 +71,39 @@ export const ReportDraftSchema = z.object({
 });
 export type ReportDraft = z.infer<typeof ReportDraftSchema>;
 
+const FactSchema = z.object({
+  fact: z.string(),
+  entities: z.array(z.string()),
+  confidence: z.enum(["high", "medium", "low"]),
+  source_note: z.string(),
+});
+
+/**
+ * Memory is updated by DELTA, not full rewrite — the merge happens
+ * deterministically in code. Restating unchanged memory every run was the
+ * single most expensive call in the pipeline.
+ */
 export const MemoryUpdateSchema = z.object({
-  reported_developments: z
+  new_developments: z
     .array(z.object({ text: z.string() }))
-    .describe("Full updated list of developments the user has now been told about"),
-  themes: z.array(z.object({ theme: z.string(), trend: z.string() })),
-  facts: z.array(
-    z.object({
-      fact: z.string(),
-      entities: z.array(z.string()),
-      confidence: z.enum(["high", "medium", "low"]),
-      source_note: z.string(),
-    }),
-  ),
-  open_questions: z.array(z.object({ question: z.string(), context: z.string() })),
+    .describe("Developments the user was told about for the FIRST time in this report; under 25 words each. Empty if nothing is new."),
+  new_facts: z
+    .array(FactSchema)
+    .describe("Durable knowledge learned in this report that is NOT already in current memory"),
+  obsolete_facts: z
+    .array(z.string())
+    .describe("Exact 'fact' text of existing facts now contradicted or superseded; to revise one, list it here and add the corrected version to new_facts"),
+  new_themes: z
+    .array(z.object({ theme: z.string(), trend: z.string() }))
+    .describe("Emerging narratives not already tracked, or an existing theme whose trend changed"),
+  obsolete_themes: z
+    .array(z.string())
+    .describe("Exact 'theme' text of themes that no longer apply"),
+  new_questions: z
+    .array(z.object({ question: z.string(), context: z.string() }))
+    .describe("Newly raised unresolved claims, contradictions, or things to watch"),
+  resolved_questions: z
+    .array(z.string())
+    .describe("Exact 'question' text of open questions this report answered"),
 });
 export type MemoryUpdate = z.infer<typeof MemoryUpdateSchema>;

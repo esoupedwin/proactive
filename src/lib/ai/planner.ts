@@ -63,25 +63,22 @@ export async function planFollowupQueries(
         "You are the research planner for a personal intelligence briefing product.",
         FOLLOWUP_GUIDANCE[channel],
         "Base queries on the concrete developments below (names, products, events), not on the topic in general.",
-        "Do not include site: operators. Keep each query under 10 words. Return 1-3 queries.",
+        "Do not include site: operators. Keep each query under 10 words. Return 1-2 queries.",
       ].join("\n"),
-      input: JSON.stringify(
-        {
-          topic: topic.title,
-          user_goal: topic.description,
-          news_findings: newsFindings.slice(0, 6).map((s) => ({
-            title: s.title,
-            snippet: s.snippet,
-          })),
-        },
-        null,
-        2,
-      ),
+      input: JSON.stringify({
+        topic: topic.title,
+        user_goal: topic.description,
+        news_findings: newsFindings.slice(0, 6).map((s) => ({
+          title: s.title,
+          snippet: s.snippet,
+        })),
+      }),
     });
 
     // Keep one broad query from the original plan so we don't lose coverage
-    // of the topic beyond today's news.
-    const merged = [...result.queries.slice(0, 3), ...fallback.slice(0, 1)];
+    // of the topic beyond today's news. Capped at 2 total — the seeker runs
+    // a single combined search per channel.
+    const merged = [...result.queries.slice(0, 1), ...fallback.slice(0, 1)];
     const unique = [...new Set(merged.filter((q) => q.trim().length > 0))];
     return unique.length > 0 ? unique : fallback;
   } catch (err) {

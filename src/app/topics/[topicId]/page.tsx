@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Bot, History, Layers, Pencil, Terminal } from "lucide-react";
+import { Bot, Coins, History, Layers, Pencil, Terminal } from "lucide-react";
 import { BottomNav } from "@/components/bottom-nav";
 import { ExpertPanel, type ExpertPanelItem } from "@/components/expert-panel";
 import { GenerateButton } from "@/components/generate-button";
 import { GenerationWatcher } from "@/components/generation-watcher";
 import { LinkPending } from "@/components/link-pending";
 import { ReportView } from "@/components/report-view";
+import { ScreenshotButton } from "@/components/screenshot-button";
 import { SourcesDrawer } from "@/components/sources-drawer";
 import { Badge } from "@/components/ui";
 import {
@@ -112,8 +113,15 @@ export default async function TopicBriefingPage({
     }));
   }
 
+  const screenshotName = `${topic.title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")}-${(readyReport?.created_at ?? new Date().toISOString()).slice(0, 10)}.png`;
+
   return (
-    <main className="px-5 pb-28 pt-6">
+    <main className="pb-28">
+      {/* Everything inside this wrapper is included in the screenshot. */}
+      <div id="report-capture" className="px-5 pt-6">
       <header className="mb-5 border-b border-rule pb-4">
         <div className="flex items-start justify-between gap-3">
           <h1 className="text-2xl font-bold leading-tight tracking-tight">
@@ -218,7 +226,21 @@ export default async function TopicBriefingPage({
             </LinkPending>{" "}
             Experts
           </Link>
+          <Link
+            href={`/topics/${topic.id}/usage`}
+            className="inline-flex min-h-11 items-center gap-2 rounded-md border border-rule px-4 text-sm font-medium hover:bg-neutral-100"
+          >
+            <LinkPending>
+              <Coins className="size-4" aria-hidden />
+            </LinkPending>{" "}
+            Tokens
+          </Link>
+          <ScreenshotButton
+            targetId="report-capture"
+            filename={screenshotName}
+          />
         </div>
+      </div>
       </div>
 
       <BottomNav topics={navTopics ?? []} currentId={topic.id} />

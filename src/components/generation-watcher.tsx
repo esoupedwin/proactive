@@ -67,7 +67,10 @@ export function GenerationWatcher({
   return (
     /* Sticky above the bottom nav (h-14) so it stays visible while
        scrolling without covering the navigation. */
-    <div className="pointer-events-none fixed inset-x-0 bottom-14 z-40 mx-auto w-full max-w-md px-3 pb-2">
+    <div
+      data-no-capture
+      className="pointer-events-none fixed inset-x-0 bottom-14 z-40 mx-auto w-full max-w-md px-3 pb-2"
+    >
       <div
         role="status"
         aria-live="polite"

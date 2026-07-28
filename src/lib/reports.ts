@@ -66,6 +66,18 @@ export function formatTokens(count: number): string {
   return String(count);
 }
 
+/**
+ * Cost label that keeps small per-step figures legible: scales decimals to
+ * the magnitude instead of collapsing everything under a cent to "<$0.01".
+ */
+export function formatUsdDetailed(value: number | null): string {
+  if (value === null) return "—";
+  if (value === 0) return "$0";
+  if (value >= 0.01) return `$${value.toFixed(2)}`;
+  if (value >= 0.001) return `$${value.toFixed(3)}`;
+  return `$${value.toFixed(4)}`;
+}
+
 /** Estimated cost label, e.g. "~$0.19" (or "<$0.01" for tiny runs). */
 export function formatUsd(value: number): string {
   if (value > 0 && value < 0.01) return "<$0.01";

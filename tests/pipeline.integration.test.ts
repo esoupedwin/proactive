@@ -100,9 +100,8 @@ function makeFakeLlm(overrides: Partial<Record<string, unknown>> = {}): Llm {
       summary: "First briefing on frontier models.",
     },
     memory_update: {
-      reported_developments: [{ text: "A new model shipped." }],
-      themes: [{ theme: "Release cadence", trend: "accelerating" }],
-      facts: [
+      new_developments: [{ text: "A new model shipped." }],
+      new_facts: [
         {
           fact: "Vendor shipped a new model",
           entities: ["Vendor"],
@@ -110,7 +109,11 @@ function makeFakeLlm(overrides: Partial<Record<string, unknown>> = {}): Llm {
           source_note: "Example News, 24 Jul",
         },
       ],
-      open_questions: [],
+      obsolete_facts: [],
+      new_themes: [{ theme: "Release cadence", trend: "accelerating" }],
+      obsolete_themes: [],
+      new_questions: [],
+      resolved_questions: [],
     },
     ...overrides,
   };
