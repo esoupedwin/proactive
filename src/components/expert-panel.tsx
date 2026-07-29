@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { Bot, Check, Landmark, RotateCcw } from "lucide-react";
 import { mentorTipFeedback } from "@/lib/actions";
+import { formatTokens, formatUsdDetailed } from "@/lib/reports";
 import type {
   AnalystAnalysis,
   Expert,
@@ -65,7 +66,11 @@ function ExpertCard({
           <p className="truncate text-xs text-ink-faint">
             {isAnalyst
               ? (expert.config.focus ?? "Neutral, evidence-based analysis")
-              : `Helps you understand key concepts · ${expert.config.level ?? "basic"} level`}
+              : `${
+                  expert.config.teaching_focus === "entities"
+                    ? "Explains the people, organisations & their ties"
+                    : "Helps you understand key concepts"
+                } · ${expert.config.level ?? "basic"} level`}
           </p>
         </div>
       </div>
@@ -99,6 +104,22 @@ function ExpertCard({
         )
       ) : (
         <RunExpertPrompt expert={expert} reportId={reportId} />
+      )}
+
+      {output?.output.usage && output.output.usage.calls > 0 && (
+        <p className="border-t border-rule px-4 py-2 text-[11px] text-ink-faint">
+          This run:{" "}
+          {formatTokens(
+            output.output.usage.input_tokens + output.output.usage.output_tokens,
+          )}{" "}
+          tokens
+          {output.output.usage.web_search_calls > 0 &&
+            ` · ${output.output.usage.web_search_calls} web search${
+              output.output.usage.web_search_calls === 1 ? "" : "es"
+            }`}
+          {" · "}
+          {formatUsdDetailed(output.output.usage.estimated_cost_usd)}
+        </p>
       )}
     </div>
   );
@@ -216,6 +237,7 @@ function TipCard({
   const [moreState, setMoreState] = useState<"idle" | "loading" | "error">(
     "idle",
   );
+  const [imageFailed, setImageFailed] = useState(false);
   const [, startTransition] = useTransition();
 
   function giveFeedback(kind: "known" | "remind") {
@@ -247,9 +269,32 @@ function TipCard({
 
   return (
     <li className="px-4 py-4">
-      <p className="text-sm leading-relaxed">
-        <strong className="font-semibold">{tip.concept}.</strong> {tip.tip}
-      </p>
+      <div className="flex items-start gap-3">
+        <p className="min-w-0 flex-1 text-sm leading-relaxed">
+          <strong className="font-semibold">{tip.concept}.</strong> {tip.tip}
+        </p>
+        {tip.image_url && !imageFailed && (
+          <a
+            href={tip.image_page_url || undefined}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="shrink-0 text-center"
+            title={`${tip.concept} on Wikipedia`}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={tip.image_url}
+              alt={tip.concept}
+              loading="lazy"
+              onError={() => setImageFailed(true)}
+              className="size-16 rounded-md border border-rule bg-neutral-50 object-contain"
+            />
+            <span className="mt-0.5 block text-[10px] text-ink-faint">
+              Wikipedia
+            </span>
+          </a>
+        )}
+      </div>
 
       {more && (
         <p className="mt-2 rounded-md bg-neutral-50 px-3 py-2 text-sm leading-relaxed text-ink-soft">

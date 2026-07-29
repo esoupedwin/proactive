@@ -11,6 +11,7 @@ import type {
   Topic,
 } from "../../types";
 import type { Llm } from "../llm";
+import { diffUsage, type UsageCollector } from "../usage";
 import { runAnalyst } from "./analyst";
 import { runMentor } from "./mentor";
 
@@ -24,8 +25,10 @@ export async function runExpertOnReport(options: {
   expert: Expert;
   topic: Topic;
   reportId: string;
+  /** The collector bound to `llm`; used to attribute this run's cost. */
+  usage?: UsageCollector;
 }): Promise<ExpertOutput | null> {
-  const { supabase, llm, expert, topic, reportId } = options;
+  const { supabase, llm, expert, topic, reportId, usage } = options;
 
   const { data: report } = await supabase
     .from("reports")
@@ -42,6 +45,7 @@ export async function runExpertOnReport(options: {
 
   let output: ExpertOutputData;
   let newMemory: ExpertMemoryData;
+  const usageBefore = usage?.snapshot();
 
   switch (expert.kind) {
     case "mentor": {
@@ -53,6 +57,7 @@ export async function runExpertOnReport(options: {
         topic,
         report.sections,
         expert.config.level ?? "basic",
+        expert.config.teaching_focus ?? "concepts",
         memory,
       );
       output = { tips: result.tips };
@@ -95,6 +100,11 @@ export async function runExpertOnReport(options: {
       return null;
   }
 
+  // Attribute exactly this run's share of the shared collector to the output.
+  if (usage && usageBefore) {
+    output.usage = diffUsage(usageBefore, usage.snapshot());
+  }
+
   const { data: outputRow, error } = await supabase
     .from("expert_outputs")
     .upsert(
@@ -128,8 +138,9 @@ export async function runActiveExpertsForReport(options: {
   llm: Llm;
   topic: Topic;
   reportId: string;
+  usage?: UsageCollector;
 }): Promise<number> {
-  const { supabase, llm, topic, reportId } = options;
+  const { supabase, llm, topic, reportId, usage } = options;
 
   const { data } = await supabase
     .from("experts")
@@ -147,6 +158,7 @@ export async function runActiveExpertsForReport(options: {
         expert,
         topic,
         reportId,
+        usage,
       });
       if (output) ran += 1;
     } catch (err) {

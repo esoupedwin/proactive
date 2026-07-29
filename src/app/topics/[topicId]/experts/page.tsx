@@ -9,7 +9,7 @@ import {
   deleteExpert,
   toggleExpertStatus,
   updateExpertFocus,
-  updateExpertLevel,
+  updateMentorSettings,
 } from "@/lib/actions";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Expert, Topic } from "@/lib/types";
@@ -20,6 +20,14 @@ const LEVEL_OPTIONS = [
   { value: "basic", label: "Basic — explain like I'm new to this" },
   { value: "intermediate", label: "Intermediate — I have working knowledge" },
   { value: "advanced", label: "Advanced — only non-obvious context" },
+];
+
+const FOCUS_OPTIONS = [
+  { value: "concepts", label: "Key concepts and background" },
+  {
+    value: "entities",
+    label: "People & organisations — who they are and how they relate",
+  },
 ];
 
 /** Manage the experts attached to a topic. */
@@ -95,7 +103,7 @@ export default async function TopicExpertsPage({
 
           <div className="space-y-4 px-4 py-4">
             <form
-              action={updateExpertLevel.bind(null, mentor.id)}
+              action={updateMentorSettings.bind(null, mentor.id)}
               className="space-y-3"
             >
               <Field
@@ -115,8 +123,25 @@ export default async function TopicExpertsPage({
                   ))}
                 </Select>
               </Field>
+              <Field
+                label="Teaching focus"
+                htmlFor="teaching_focus"
+                hint="“People & organisations” highlights relationships between mentioned entities (e.g. UMNO is part of Barisan Nasional) and fact-checks them with a web search."
+              >
+                <Select
+                  id="teaching_focus"
+                  name="teaching_focus"
+                  defaultValue={mentor.config.teaching_focus ?? "concepts"}
+                >
+                  {FOCUS_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
               <Button type="submit" variant="outline">
-                Save level
+                Save teaching settings
               </Button>
             </form>
 
@@ -163,6 +188,23 @@ export default async function TopicExpertsPage({
             >
               <Select id="level" name="level" defaultValue="basic">
                 {LEVEL_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field
+              label="Teaching focus"
+              htmlFor="add_teaching_focus"
+              hint="“People & organisations” highlights relationships between mentioned entities and fact-checks them with a web search."
+            >
+              <Select
+                id="add_teaching_focus"
+                name="teaching_focus"
+                defaultValue="concepts"
+              >
+                {FOCUS_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>
                     {o.label}
                   </option>

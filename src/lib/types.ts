@@ -139,10 +139,14 @@ export interface Source {
 
 export type ExpertKind = "mentor" | "analyst";
 export type MentorLevel = "basic" | "intermediate" | "advanced";
+/** What Mentor teaches: general concepts, or the mentioned people/organisations and their relationships. */
+export type MentorFocus = "concepts" | "entities";
 
 export interface ExpertConfig {
   /** Mentor: how basic or advanced explanations should be. */
   level?: MentorLevel;
+  /** Mentor: teaching focus. "entities" fact-checks via web search. */
+  teaching_focus?: MentorFocus;
   /** Analyst: its specialization, e.g. "Malaysia's domestic politics, governance, power dynamics, and society". */
   focus?: string;
 }
@@ -166,6 +170,10 @@ export interface MentorTip {
   tip: string;
   /** Deeper follow-up explanation from "Share more", if requested. */
   more?: string | null;
+  /** Entity photo/logo from the entity's Wikipedia page (entities focus). */
+  image_url?: string | null;
+  /** The Wikipedia article the image came from, for attribution. */
+  image_page_url?: string | null;
 }
 
 export type ScenarioLikelihood = "likely" | "possible" | "unlikely";
@@ -195,6 +203,8 @@ export interface AnalystAnalysis {
 export interface ExpertOutputData {
   tips?: MentorTip[];
   analysis?: AnalystAnalysis;
+  /** OpenAI usage/cost of this expert's run (including later expansions). */
+  usage?: ReportUsage;
 }
 
 export interface ExpertOutput {

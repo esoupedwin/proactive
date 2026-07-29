@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  addUsage,
   createUsageCollector,
+  diffUsage,
   estimateCallCostUsd,
   estimateCostUsd,
   pricingFor,
@@ -76,6 +78,66 @@ describe("estimateCostUsd", () => {
         0,
       ),
     ).toBeNull();
+  });
+});
+
+describe("diffUsage / addUsage", () => {
+  it("attributes only the delta between two snapshots, with its own cost", () => {
+    const collector = createUsageCollector();
+    collector.record("gpt-5", { input_tokens: 10_000, output_tokens: 2_000 }, 1);
+    const before = collector.snapshot();
+    collector.record("gpt-5-mini", { input_tokens: 3_000, output_tokens: 500 }, 1);
+    collector.record("gpt-5", { input_tokens: 1_000, output_tokens: 100 }, 0);
+
+    const delta = diffUsage(before, collector.snapshot());
+    expect(delta.calls).toBe(2);
+    expect(delta.input_tokens).toBe(4_000);
+    expect(delta.output_tokens).toBe(600);
+    expect(delta.web_search_calls).toBe(1);
+    expect(delta.by_model["gpt-5-mini"]).toEqual({
+      calls: 1,
+      input_tokens: 3_000,
+      output_tokens: 500,
+    });
+    // Models untouched in the delta are omitted... gpt-5 had activity, so present.
+    expect(delta.by_model["gpt-5"]).toEqual({
+      calls: 1,
+      input_tokens: 1_000,
+      output_tokens: 100,
+    });
+    expect(delta.estimated_cost_usd).toBeCloseTo(
+      (3_000 / 1e6) * 0.25 + (500 / 1e6) * 2 + (1_000 / 1e6) * 1.25 + (100 / 1e6) * 10 + 0.01,
+      6,
+    );
+  });
+
+  it("adds two usage records and reprices the total", () => {
+    const a = {
+      calls: 1,
+      input_tokens: 1_000,
+      output_tokens: 200,
+      web_search_calls: 1,
+      by_model: { "gpt-5-mini": { calls: 1, input_tokens: 1_000, output_tokens: 200 } },
+      estimated_cost_usd: 0.011,
+    };
+    const b = {
+      calls: 1,
+      input_tokens: 500,
+      output_tokens: 100,
+      web_search_calls: 0,
+      by_model: { "gpt-5-mini": { calls: 1, input_tokens: 500, output_tokens: 100 } },
+      estimated_cost_usd: 0.001,
+    };
+    const sum = addUsage(a, b);
+    expect(sum.calls).toBe(2);
+    expect(sum.input_tokens).toBe(1_500);
+    expect(sum.by_model["gpt-5-mini"]!.input_tokens).toBe(1_500);
+    expect(sum.web_search_calls).toBe(1);
+    // estimateCostUsd rounds totals to 4 decimal places.
+    expect(sum.estimated_cost_usd).toBeCloseTo(
+      (1_500 / 1e6) * 0.25 + (300 / 1e6) * 2 + 0.01,
+      3,
+    );
   });
 });
 

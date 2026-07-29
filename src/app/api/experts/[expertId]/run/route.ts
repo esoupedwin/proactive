@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { runExpertOnReport } from "@/lib/ai/experts/runner";
-import { openAiLlm } from "@/lib/ai/openai";
+import { createOpenAiLlm } from "@/lib/ai/openai";
+import { createUsageCollector } from "@/lib/ai/usage";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Expert, Topic } from "@/lib/types";
 
@@ -48,12 +49,14 @@ export async function POST(
   }
 
   try {
+    const usage = createUsageCollector();
     const output = await runExpertOnReport({
       supabase,
-      llm: openAiLlm,
+      llm: createOpenAiLlm(usage),
       expert,
       topic,
       reportId: body.reportId,
+      usage,
     });
     if (!output) {
       return NextResponse.json(

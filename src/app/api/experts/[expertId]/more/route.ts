@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { expandMentorTip } from "@/lib/ai/experts/mentor";
-import { openAiLlm } from "@/lib/ai/openai";
+import { createOpenAiLlm } from "@/lib/ai/openai";
+import { addUsage, createUsageCollector } from "@/lib/ai/usage";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Expert, ExpertOutput, Topic } from "@/lib/types";
 
@@ -72,10 +73,12 @@ export async function POST(
   }
 
   try {
+    const collector = createUsageCollector();
     const more = await expandMentorTip(
-      openAiLlm,
+      createOpenAiLlm(collector),
       topic,
       expert.config.level ?? "basic",
+      expert.config.teaching_focus ?? "concepts",
       tip.concept,
       tip.tip,
     );
@@ -83,9 +86,14 @@ export async function POST(
     const tips = (output.output.tips ?? []).map((t) =>
       t.id === tip.id ? { ...t, more } : t,
     );
+    // Fold the expansion's cost into the run's stored total.
+    const delta = collector.snapshot();
+    const usage = output.output.usage
+      ? addUsage(output.output.usage, delta)
+      : delta;
     await supabase
       .from("expert_outputs")
-      .update({ output: { tips } })
+      .update({ output: { ...output.output, tips, usage } })
       .eq("id", output.id);
 
     return NextResponse.json({ ok: true, more });

@@ -95,6 +95,7 @@ export async function POST(
       llm,
       topic,
       reportId: report.id,
+      usage,
     });
     if (ran > 0) {
       await supabase

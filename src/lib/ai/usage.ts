@@ -85,6 +85,55 @@ export function estimateCostUsd(
   return Math.round(cost * 10_000) / 10_000;
 }
 
+/** Usage consumed between two snapshots of the same collector (e.g. one expert's run). */
+export function diffUsage(before: ReportUsage, after: ReportUsage): ReportUsage {
+  const byModel: Record<string, ModelUsage> = {};
+  for (const [model, a] of Object.entries(after.by_model)) {
+    const b = before.by_model[model];
+    const delta = {
+      calls: a.calls - (b?.calls ?? 0),
+      input_tokens: a.input_tokens - (b?.input_tokens ?? 0),
+      output_tokens: a.output_tokens - (b?.output_tokens ?? 0),
+    };
+    if (delta.calls > 0 || delta.input_tokens > 0 || delta.output_tokens > 0) {
+      byModel[model] = delta;
+    }
+  }
+  const webSearchCalls = after.web_search_calls - before.web_search_calls;
+  return {
+    calls: after.calls - before.calls,
+    input_tokens: after.input_tokens - before.input_tokens,
+    output_tokens: after.output_tokens - before.output_tokens,
+    web_search_calls: webSearchCalls,
+    by_model: byModel,
+    estimated_cost_usd: estimateCostUsd(byModel, webSearchCalls),
+  };
+}
+
+/** Sum of two usage records (e.g. a run plus its later "Share more" calls). */
+export function addUsage(a: ReportUsage, b: ReportUsage): ReportUsage {
+  const byModel: Record<string, ModelUsage> = structuredClone(a.by_model);
+  for (const [model, usage] of Object.entries(b.by_model)) {
+    const entry = (byModel[model] ??= {
+      calls: 0,
+      input_tokens: 0,
+      output_tokens: 0,
+    });
+    entry.calls += usage.calls;
+    entry.input_tokens += usage.input_tokens;
+    entry.output_tokens += usage.output_tokens;
+  }
+  const webSearchCalls = a.web_search_calls + b.web_search_calls;
+  return {
+    calls: a.calls + b.calls,
+    input_tokens: a.input_tokens + b.input_tokens,
+    output_tokens: a.output_tokens + b.output_tokens,
+    web_search_calls: webSearchCalls,
+    by_model: byModel,
+    estimated_cost_usd: estimateCostUsd(byModel, webSearchCalls),
+  };
+}
+
 export interface UsageCollector {
   record(
     model: string,

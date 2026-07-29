@@ -87,7 +87,14 @@ describe("runMentor", () => {
       },
     };
 
-    const result = await runMentor(fakeLlm, topic, sections, "basic", memory);
+    const result = await runMentor(
+      fakeLlm,
+      topic,
+      sections,
+      "basic",
+      "concepts",
+      memory,
+    );
 
     // Known list forwarded so the model can avoid re-teaching.
     expect(capturedInput).toContain("JS-SEZ");
@@ -99,5 +106,80 @@ describe("runMentor", () => {
     expect(
       result.memory.taught.find((t) => t.concept === "Madani framework"),
     ).toBeTruthy();
+  });
+
+  it("entities focus attaches Wikipedia images to tips; concepts never fetches", async () => {
+    const fetched: string[] = [];
+    const stubImages = async (name: string) => {
+      fetched.push(name);
+      return name === "Najib Razak"
+        ? {
+            image_url: "https://upload.wikimedia.org/najib.jpg",
+            page_url: "https://en.wikipedia.org/wiki/Najib_Razak",
+            page_title: "Najib Razak",
+          }
+        : null;
+    };
+    const llmWithTips: Llm = {
+      async structured<T>(options: StructuredCallOptions<T>): Promise<T> {
+        return options.schema.parse({
+          tips: [
+            { concept: "Najib Razak", tip: "Former PM, now in Kajang Prison." },
+            { concept: "Obscure Org", tip: "A minor body." },
+          ],
+        });
+      },
+    };
+
+    const entities = await runMentor(
+      llmWithTips,
+      topic,
+      sections,
+      "basic",
+      "entities",
+      memory,
+      stubImages,
+    );
+    expect(fetched).toEqual(["Najib Razak", "Obscure Org"]);
+    expect(entities.tips[0]).toMatchObject({
+      image_url: "https://upload.wikimedia.org/najib.jpg",
+      image_page_url: "https://en.wikipedia.org/wiki/Najib_Razak",
+    });
+    expect(entities.tips[1]!.image_url).toBeUndefined();
+
+    fetched.length = 0;
+    await runMentor(
+      llmWithTips,
+      topic,
+      sections,
+      "basic",
+      "concepts",
+      memory,
+      stubImages,
+    );
+    expect(fetched).toEqual([]);
+  });
+
+  it("entities focus enables web search and relationship guidance; concepts does not", async () => {
+    const captured: Array<{ useWebSearch?: boolean; instructions: string }> = [];
+    const fakeLlm: Llm = {
+      async structured<T>(options: StructuredCallOptions<T>): Promise<T> {
+        captured.push({
+          useWebSearch: options.useWebSearch,
+          instructions: options.instructions,
+        });
+        return options.schema.parse({ tips: [] });
+      },
+    };
+
+    await runMentor(fakeLlm, topic, sections, "basic", "entities", memory);
+    await runMentor(fakeLlm, topic, sections, "basic", "concepts", memory);
+
+    expect(captured[0]!.useWebSearch).toBe(true);
+    expect(captured[0]!.instructions).toContain("RELATIONSHIPS");
+    expect(captured[0]!.instructions).toContain("FACT-CHECK");
+
+    expect(captured[1]!.useWebSearch).toBe(false);
+    expect(captured[1]!.instructions).not.toContain("FACT-CHECK");
   });
 });

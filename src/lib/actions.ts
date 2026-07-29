@@ -8,6 +8,7 @@ import { createSupabaseServerClient } from "./supabase/server";
 import type {
   DetailLevel,
   Expert,
+  MentorFocus,
   MentorLevel,
   MentorMemoryData,
   Topic,
@@ -173,10 +174,16 @@ export async function deleteTopic(topicId: string): Promise<void> {
 // ---------------------------------------------------------------------------
 
 const MENTOR_LEVELS: MentorLevel[] = ["basic", "intermediate", "advanced"];
+const MENTOR_FOCUSES: MentorFocus[] = ["concepts", "entities"];
 
 function parseMentorLevel(value: FormDataEntryValue | null): MentorLevel {
   const level = String(value ?? "basic") as MentorLevel;
   return MENTOR_LEVELS.includes(level) ? level : "basic";
+}
+
+function parseMentorFocus(value: FormDataEntryValue | null): MentorFocus {
+  const focus = String(value ?? "concepts") as MentorFocus;
+  return MENTOR_FOCUSES.includes(focus) ? focus : "concepts";
 }
 
 export async function addMentorExpert(
@@ -191,7 +198,10 @@ export async function addMentorExpert(
     kind: "mentor",
     name: "Mentor",
     status: "active",
-    config: { level: parseMentorLevel(formData.get("level")) },
+    config: {
+      level: parseMentorLevel(formData.get("level")),
+      teaching_focus: parseMentorFocus(formData.get("teaching_focus")),
+    },
   });
 
   revalidatePath(`/topics/${topicId}/experts`);
@@ -245,7 +255,7 @@ export async function updateExpertFocus(
   revalidatePath(`/topics/${expert.topic_id}/experts`);
 }
 
-export async function updateExpertLevel(
+export async function updateMentorSettings(
   expertId: string,
   formData: FormData,
 ): Promise<void> {
@@ -261,12 +271,17 @@ export async function updateExpertLevel(
   await supabase
     .from("experts")
     .update({
-      config: { ...expert.config, level: parseMentorLevel(formData.get("level")) },
+      config: {
+        ...expert.config,
+        level: parseMentorLevel(formData.get("level")),
+        teaching_focus: parseMentorFocus(formData.get("teaching_focus")),
+      },
       updated_at: new Date().toISOString(),
     })
     .eq("id", expertId);
 
   revalidatePath(`/topics/${expert.topic_id}/experts`);
+  revalidatePath(`/topics/${expert.topic_id}`);
 }
 
 export async function toggleExpertStatus(expertId: string): Promise<void> {

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type {
+  MentorFocus,
   MentorLevel,
   MentorMemoryData,
   MentorTip,
@@ -8,6 +9,7 @@ import type {
 } from "../../types";
 import type { Llm } from "../llm";
 import { plainReportText } from "./report-text";
+import { fetchWikiImage, type WikiImageFetcher } from "./wiki-image";
 
 /**
  * Mentor — the first "expert": reads a generated report and teaches the user
@@ -18,6 +20,25 @@ import { plainReportText } from "./report-text";
 
 const MAX_TIPS = 3;
 const MAX_TAUGHT_CONCEPTS = 100;
+
+const FOCUS_GUIDANCE: Record<MentorFocus, string> = {
+  concepts:
+    "Pick the concepts, entities, acronyms, or relationships the report ASSUMES but a reader at this level may not know (e.g. 'what is JS-SEZ', 'what is the relationship between Anwar Ibrahim and Ahmad Zahid Hamidi').",
+  entities: [
+    "Focus on the PEOPLE and ORGANISATIONS mentioned in the report. Each tip profiles exactly ONE entity — the 'concept' field is the entity's name.",
+    "Structure every tip in this order:",
+    "1. Identity and affiliation chain: who/what the entity is, with its full position in the structure — e.g. a person is 'a member of party X, a component party of coalition Y, where they serve as [role]'; an organisation gets its nature, full name/abbreviation, and (for coalitions) its member parties or key leaders.",
+    "2. RELATIONSHIPS to other entities mentioned in the report, where applicable.",
+    "3. What the entity did or why it matters in THIS report.",
+    "",
+    "Style examples (match this shape and density):",
+    "- 'Mohd Hasbie Muda is a member of the National Trust Party (AMANAH), a component party of the Pakatan Harapan (PH) coalition, where he has served as AMANAH Youth Chief. He is blaming a DAP leader's reaction to Najib Razak's legal setback for worsening PH–BN relations.'",
+    "- 'Najib Razak is a Malaysian politician who served as the sixth prime minister of Malaysia from 2009 to 2018. He is currently serving his sentence in Kajang Prison.'",
+    "- 'Barisan Nasional (BN; English: National Front) is a political coalition in Malaysia. Its member parties are UMNO, MCA, MIC, PBRS and PPP.'",
+    "",
+    "Use the web search tool to FACT-CHECK names, roles, affiliations, and relationships before asserting them, and to supplement the report with verified, current background — roles and alliances change. If something cannot be verified, say so explicitly rather than guessing.",
+  ].join("\n"),
+};
 
 const LEVEL_GUIDANCE: Record<MentorLevel, string> = {
   basic:
@@ -101,18 +122,25 @@ export async function runMentor(
   topic: Topic,
   sections: ReportSections,
   level: MentorLevel,
+  focus: MentorFocus,
   memory: MentorMemoryData,
+  imageFetcher: WikiImageFetcher = fetchWikiImage,
 ): Promise<{ tips: MentorTip[]; memory: MentorMemoryData }> {
   const result = await llm.structured({
     tier: "search",
     schema: MentorTipsSchema,
     schemaName: "mentor_tips",
+    // Entity teaching is fact-checked against the live web.
+    useWebSearch: focus === "entities",
     instructions: [
       "You are Mentor, a personal tutor embedded in a research briefing app. Your goal is to steadily improve the user's understanding of their topic.",
       LEVEL_GUIDANCE[level],
       "",
-      "Read the report and pick the concepts, entities, acronyms, or relationships it ASSUMES but a reader at this level may not know (e.g. 'what is JS-SEZ', 'what is the relationship between Anwar Ibrahim and Ahmad Zahid Hamidi').",
-      `Write at most ${MAX_TIPS} 'did you know'-style tips. Fewer is fine; return none if nothing needs explaining.`,
+      "Read the report.",
+      FOCUS_GUIDANCE[focus],
+      focus === "entities"
+        ? `Write at most ${MAX_TIPS} entity profiles, choosing the entities most central to this report. Fewer is fine; return none if every mentioned entity is already known.`
+        : `Write at most ${MAX_TIPS} 'did you know'-style tips. Fewer is fine; return none if nothing needs explaining.`,
       "Rules:",
       "- NEVER explain a concept in the 'already known' list — the user confirmed they know it.",
       "- PREFER concepts in the 'asked to revisit' list when they are still relevant to this report.",
@@ -132,12 +160,26 @@ export async function runMentor(
     }),
   });
 
-  const tips: MentorTip[] = result.tips.slice(0, MAX_TIPS).map((t) => ({
+  let tips: MentorTip[] = result.tips.slice(0, MAX_TIPS).map((t) => ({
     id: crypto.randomUUID(),
     concept: t.concept.trim(),
     tip: t.tip.trim(),
     more: null,
   }));
+
+  // Entity profiles get the entity's Wikipedia photo/logo — best-effort,
+  // fetched in parallel; a miss just leaves the tip without an image.
+  if (focus === "entities" && tips.length > 0) {
+    const images = await Promise.all(
+      tips.map((t) => imageFetcher(t.concept).catch(() => null)),
+    );
+    tips = tips.map((tip, i) => {
+      const image = images[i];
+      return image
+        ? { ...tip, image_url: image.image_url, image_page_url: image.page_url }
+        : tip;
+    });
+  }
 
   return {
     tips,
@@ -150,6 +192,7 @@ export async function expandMentorTip(
   llm: Llm,
   topic: Topic,
   level: MentorLevel,
+  focus: MentorFocus,
   concept: string,
   priorTip: string,
 ): Promise<string> {
@@ -157,10 +200,16 @@ export async function expandMentorTip(
     tier: "search",
     schema: MentorMoreSchema,
     schemaName: "mentor_more",
+    useWebSearch: focus === "entities",
     instructions: [
       "You are Mentor, a personal tutor. The user read your tip and asked to learn MORE about this concept.",
       LEVEL_GUIDANCE[level],
       "Go one level deeper than the original tip: background, mechanics, why it matters for the topic. Do not repeat the original tip. State uncertainty where it exists.",
+      ...(focus === "entities"
+        ? [
+            "Use the web search tool to verify roles, affiliations, and relationships before asserting them; flag anything you could not verify.",
+          ]
+        : []),
     ].join("\n"),
     input: JSON.stringify({
       topic: { title: topic.title, goal: topic.description },
