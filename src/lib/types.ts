@@ -2,7 +2,7 @@
 
 export type DetailLevel = "brief" | "standard" | "deep";
 export type TopicStatus = "active" | "paused";
-export type UpdateFrequency = "manual" | "daily" | "weekly";
+export type UpdateFrequency = "manual" | "daily" | "every_3_days" | "weekly";
 export type ReportStatus = "generating" | "ready" | "error";
 export type SourceType = "news" | "reddit" | "medium";
 
@@ -29,6 +29,8 @@ export interface Topic {
   frequency: UpdateFrequency;
   status: TopicStatus;
   position: number;
+  /** Reusable news-search query, LLM-formulated at topic setup. */
+  news_query: string | null;
   last_generated_at: string | null;
   created_at: string;
   updated_at: string;
@@ -57,7 +59,8 @@ export interface ReportSections {
   latest_developments: ReportBullet[];
   community_reaction: ReportBullet[];
   practitioner_view: ReportBullet[];
-  cross_source_takeaway: string;
+  /** Point-form takeaways; older stored reports hold a single paragraph string. */
+  cross_source_takeaway: string | string[];
   what_changed: ReportBullet[];
   /** True when the pipeline judged there was nothing meaningful to add. */
   no_meaningful_change: boolean;

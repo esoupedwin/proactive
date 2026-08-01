@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 import {
   knownConcepts,
   mergeTaughtConcepts,
@@ -62,6 +62,7 @@ describe("runMentor", () => {
     frequency: "daily",
     status: "active",
     position: 0,
+    news_query: null,
     last_generated_at: null,
     created_at: "2026-07-01T00:00:00Z",
     updated_at: "2026-07-01T00:00:00Z",

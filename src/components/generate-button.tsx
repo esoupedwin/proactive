@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { clsx } from "clsx";
 import { RefreshCw } from "lucide-react";
 import { formatElapsed, formatUsageSummary } from "@/lib/reports";
 import type { ReportUsage } from "@/lib/types";
@@ -16,8 +17,17 @@ const STAGE_POLL_MS = 1200;
  * Manually trigger a new report. While the request runs it shows the
  * pipeline's live stage (polled from the report row) and a millisecond
  * elapsed timer.
+ *
+ * `compact` renders an icon-only square for the action row under the title;
+ * the live status card and result message are identical either way.
  */
-export function GenerateButton({ topicId }: { topicId: string }) {
+export function GenerateButton({
+  topicId,
+  compact = false,
+}: {
+  topicId: string;
+  compact?: boolean;
+}) {
   const router = useRouter();
   const [state, setState] = useState<GenerateState>("idle");
   const [message, setMessage] = useState<string | null>(null);
@@ -109,22 +119,38 @@ export function GenerateButton({ topicId }: { topicId: string }) {
   }
 
   return (
-    <div className="flex flex-col gap-2">
-      <Button
-        onClick={generate}
-        disabled={state === "loading"}
-        aria-label="Generate a new update for this topic"
-      >
-        {state === "loading" ? (
-          <>
-            <Spinner /> Researching…
-          </>
-        ) : (
-          <>
-            <RefreshCw className="size-4" aria-hidden /> Generate Update
-          </>
-        )}
-      </Button>
+    <div className={compact ? "contents" : "flex flex-col gap-2"}>
+      {compact ? (
+        <button
+          type="button"
+          onClick={generate}
+          disabled={state === "loading"}
+          aria-label="Generate a new update for this topic"
+          className="inline-flex size-11 items-center justify-center rounded-md border border-rule hover:bg-neutral-100 disabled:opacity-50"
+        >
+          {state === "loading" ? (
+            <Spinner />
+          ) : (
+            <RefreshCw className="size-5" aria-hidden />
+          )}
+        </button>
+      ) : (
+        <Button
+          onClick={generate}
+          disabled={state === "loading"}
+          aria-label="Generate a new update for this topic"
+        >
+          {state === "loading" ? (
+            <>
+              <Spinner /> Researching…
+            </>
+          ) : (
+            <>
+              <RefreshCw className="size-4" aria-hidden /> Generate Update
+            </>
+          )}
+        </Button>
+      )}
 
       {state === "loading" && (
         /* Sticky above the bottom nav (h-14) so it stays visible while
@@ -133,18 +159,20 @@ export function GenerateButton({ topicId }: { topicId: string }) {
           data-no-capture
           className="pointer-events-none fixed inset-x-0 bottom-14 z-40 mx-auto w-full max-w-md px-3 pb-2"
         >
+          {/* Inverted against the page — ink background, paper text — so the
+              live status reads as an overlay rather than page content. */}
           <div
             role="status"
             aria-live="polite"
-            className="pointer-events-auto rounded-md border border-rule bg-paper px-4 py-3 shadow-lg"
+            className="pointer-events-auto rounded-md border border-ink bg-ink px-4 py-3 text-paper shadow-lg"
           >
             <div className="flex items-center justify-between gap-3">
               <p className="text-sm font-medium">{stage}…</p>
-              <p className="font-mono text-sm tabular-nums text-ink-soft">
+              <p className="font-mono text-sm tabular-nums text-paper/70">
                 {formatElapsed(elapsedMs)}
               </p>
             </div>
-            <p className="mt-1.5 text-xs leading-relaxed text-ink-faint">
+            <p className="mt-1.5 text-xs leading-relaxed text-paper/60">
               Proactive plans queries, searches news → Reddit → Medium,
               extracts and deduplicates findings, then writes your briefing.
               Typically 1–3 minutes.
@@ -156,11 +184,13 @@ export function GenerateButton({ topicId }: { topicId: string }) {
       {message && state !== "loading" && (
         <p
           role="status"
-          className={
-            state === "error"
-              ? "text-xs font-medium text-red-700"
-              : "text-xs font-medium text-emerald-700"
-          }
+          className={clsx(
+            "text-xs font-medium",
+            // In compact mode the parent is `contents`, so this lands directly
+            // in the action row — full width makes it wrap onto its own line.
+            compact && "w-full",
+            state === "error" ? "text-red-700" : "text-emerald-700",
+          )}
         >
           {message}
           {state === "error" && finalMs !== null && (

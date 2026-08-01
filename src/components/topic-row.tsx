@@ -12,6 +12,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { deleteTopic, toggleTopicStatus } from "@/lib/actions";
+import { frequencyLabel } from "@/lib/reports";
 import type { Topic } from "@/lib/types";
 import { LinkPending } from "./link-pending";
 import { Badge, Spinner } from "./ui";
@@ -123,7 +124,8 @@ export function TopicRow({ topic }: { topic: Topic }) {
             </>
           )}
           <p className="mt-3 text-xs text-ink-faint">
-            Detail: {topic.detail_level} · Frequency: {topic.frequency} ·{" "}
+            Detail: {topic.detail_level} · Frequency:{" "}
+            {frequencyLabel(topic.frequency)} ·{" "}
             {topic.status === "active" ? "Monitoring" : "Paused"}
           </p>
         </div>

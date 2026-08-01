@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 import { mergeScenarios, runAnalyst } from "@/lib/ai/experts/analyst";
 import type { Llm, StructuredCallOptions } from "@/lib/ai/llm";
 import type {
@@ -152,6 +152,7 @@ describe("runAnalyst", () => {
     frequency: "daily",
     status: "active",
     position: 0,
+    news_query: null,
     last_generated_at: null,
     created_at: "2026-07-01T00:00:00Z",
     updated_at: "2026-07-01T00:00:00Z",
@@ -207,7 +208,7 @@ describe("runAnalyst", () => {
     };
     const sent = input.previously_tracked_scenarios.map((s) => s.scenario);
     expect(sent).toContain("Audit scope narrows quietly");
-    expect(sent).not.toContain("Cabinet reshuffle in June"); // resolved — not re-litigated
+    expect(sent).not.toContain("Cabinet reshuffle in June"); // resolved â€” not re-litigated
     expect(captured!.tier).toBe("report");
 
     expect(result.analysis.assessment).toContain("reshuffle");

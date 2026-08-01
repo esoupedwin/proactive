@@ -4,6 +4,7 @@ import {
   highlightEntities,
   parseMarkedText,
 } from "@/lib/entities";
+import { takeawayPoints } from "@/lib/reports";
 import type { ReportBullet, ReportSections, Source } from "@/lib/types";
 import { HeroImage } from "./hero-image";
 
@@ -81,14 +82,23 @@ export function ReportView({
           creditUrl={heroSource?.url ?? null}
         />
       )}
-      {sections.cross_source_takeaway && (
+      {takeawayPoints(sections.cross_source_takeaway).length > 0 && (
         <section aria-label="Overall Takeaway">
           <h2 className="mb-2 border-b border-rule pb-1 text-sm font-bold uppercase tracking-wide">
             Overall Takeaway
           </h2>
-          <p className="text-[15px] leading-relaxed text-ink">
-            <RichText text={sections.cross_source_takeaway} entities={entities} />
-          </p>
+          <ul className="space-y-2.5">
+            {takeawayPoints(sections.cross_source_takeaway).map((point, i) => (
+              <li key={i} className="flex gap-2 text-[15px] leading-relaxed">
+                <span aria-hidden className="select-none text-ink-faint">
+                  •
+                </span>
+                <span>
+                  <RichText text={point} entities={entities} />
+                </span>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
       <Section

@@ -1,10 +1,12 @@
+import { freshnessDays } from "../reports";
 import type { SourceType, Topic } from "../types";
+import { freshnessCutoff } from "./freshness";
 import type { Llm } from "./llm";
 import { planFollowupQueries } from "./planner";
 import { SeekResultSchema, type FoundSource, type SearchPlan } from "./schemas";
 
 const CHANNEL_GUIDANCE: Record<SourceType, string> = {
-  news: "Search reputable news and trade publications. Prefer reporting from the last 7 days. Exclude reddit.com and medium.com results.",
+  news: "Search reputable news and trade publications. Exclude reddit.com and medium.com results.",
   reddit:
     "Search Reddit discussions (site:reddit.com). Find threads with substantive community reaction, not empty link posts. Note the subreddit as the publisher.",
   medium:
@@ -31,6 +33,8 @@ export async function seekChannel(
   queries: string[],
 ): Promise<SeekOutput> {
   const today = new Date().toISOString().slice(0, 10);
+  const windowDays = freshnessDays(topic.frequency);
+  const cutoff = freshnessCutoff(topic.frequency).toISOString().slice(0, 10);
 
   const result = await llm.structured({
     tier: "search",
@@ -40,6 +44,7 @@ export async function seekChannel(
     instructions: [
       "You are the information seeker for a personal research companion.",
       CHANNEL_GUIDANCE[channel],
+      `FRESHNESS: this topic uses a ${windowDays}-day window. Only include sources published on or after ${cutoff}; discard anything older. If a source's publication date is unknown, include it only if it clearly covers current developments.`,
       // Each web_search call is billed separately and pulls the fetched pages
       // in as input tokens, so one well-formed search per channel.
       "Make AT MOST ONE web search call. If several queries are supplied, combine them into a single well-formed search that covers them.",

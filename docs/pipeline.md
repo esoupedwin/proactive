@@ -64,8 +64,11 @@ Converts the user's own words into machine queries.
 - **Receives:** today's date, topic title, the "I want to know" description,
   and the key interest areas.
 - **Produces:** separate query sets for news, Reddit and Medium.
-- **Constraints:** queries target roughly the last 7 days, stay under 10
-  words, and carry no `site:` operators — the channel is handled separately.
+- **Constraints:** queries target the topic's freshness window — derived
+  from its update frequency (daily → 1 day, every 3 days → 3, weekly/manual
+  → 7) — stay under 10 words, and carry no `site:` operators. The same
+  window is enforced in code after extraction: sources verifiably older
+  than the cutoff are dropped (unknown dates are kept).
 
 ## Steps 2, 4, 6 — Information seeker
 

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 import type { Llm, StructuredCallOptions } from "@/lib/ai/llm";
 import { runReportPipeline, type ReportStore } from "@/lib/ai/pipeline";
 import { createTraceCollector } from "@/lib/ai/trace";
@@ -13,7 +13,7 @@ import type {
 
 /**
  * Integration test for the full report pipeline using a mocked LLM and an
- * in-memory store — no OpenAI or Supabase required.
+ * in-memory store â€” no OpenAI or Supabase required.
  */
 
 const topic: Topic = {
@@ -26,10 +26,15 @@ const topic: Topic = {
   frequency: "daily",
   status: "active",
   position: 0,
+  news_query: null,
   last_generated_at: null,
   created_at: "2026-07-20T00:00:00Z",
   updated_at: "2026-07-20T00:00:00Z",
 };
+
+// Inside the topic's freshness window (frequency-derived) so the age filter
+// keeps the canned sources.
+const TODAY = new Date().toISOString().slice(0, 10);
 
 /** Canned structured outputs keyed by schema name. */
 function makeFakeLlm(overrides: Partial<Record<string, unknown>> = {}): Llm {
@@ -48,7 +53,7 @@ function makeFakeLlm(overrides: Partial<Record<string, unknown>> = {}): Llm {
           title: "Vendor ships new model",
           url: "https://news.example.com/model?utm_source=x",
           publisher: "Example News",
-          published_at: "2026-07-24",
+          published_at: TODAY,
           snippet: "A new model shipped.",
         },
         {
@@ -56,7 +61,7 @@ function makeFakeLlm(overrides: Partial<Record<string, unknown>> = {}): Llm {
           title: "Vendor ships new model",
           url: "https://news.example.com/model",
           publisher: "Example News",
-          published_at: "2026-07-24",
+          published_at: TODAY,
           snippet: "A new model shipped (dup).",
         },
       ],
@@ -68,7 +73,7 @@ function makeFakeLlm(overrides: Partial<Record<string, unknown>> = {}): Llm {
           title: "Vendor ships new model",
           publisher: "Example News",
           url: "https://news.example.com/model?utm_source=x",
-          published_at: "2026-07-24",
+          published_at: TODAY,
           gist: "A new model shipped.",
           relevance: "Frontier release",
           novelty: "new",
@@ -79,7 +84,7 @@ function makeFakeLlm(overrides: Partial<Record<string, unknown>> = {}): Llm {
           title: "Vendor ships new model",
           publisher: "Example News",
           url: "https://news.example.com/model",
-          published_at: "2026-07-24",
+          published_at: TODAY,
           gist: "A new model shipped with more detail.",
           relevance: "Frontier release",
           novelty: "new",
@@ -94,10 +99,11 @@ function makeFakeLlm(overrides: Partial<Record<string, unknown>> = {}): Llm {
       ],
       community_reaction: [],
       practitioner_view: [],
-      cross_source_takeaway: "The frontier keeps moving.",
+      cross_source_takeaway: ["The frontier keeps moving."],
       what_changed: [{ text: "Initial baseline.", source_refs: [] }],
       no_meaningful_change: false,
       summary: "First briefing on frontier models.",
+      cover_source_ref: 0,
     },
     memory_update: {
       new_developments: [{ text: "A new model shipped." }],
@@ -208,9 +214,9 @@ describe("runReportPipeline (mocked AI)", () => {
     // Report completed with sanitized citations: the invented ref-99 bullet dropped.
     expect(state.completed).not.toBeNull();
     expect(state.completed!.sections.latest_developments).toHaveLength(1);
-    expect(state.completed!.sections.cross_source_takeaway).toBe(
+    expect(state.completed!.sections.cross_source_takeaway).toEqual([
       "The frontier keeps moving.",
-    );
+    ]);
     expect(state.completed!.summary).toBe("First briefing on frontier models.");
     expect(state.failed).toBeNull();
     expect(state.topicGenerated).toBe(true);

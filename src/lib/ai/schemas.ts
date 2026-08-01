@@ -62,12 +62,19 @@ export const ReportDraftSchema = z.object({
   latest_developments: z.array(ReportBulletSchema),
   community_reaction: z.array(ReportBulletSchema),
   practitioner_view: z.array(ReportBulletSchema),
-  cross_source_takeaway: z.string(),
+  cross_source_takeaway: z
+    .array(z.string())
+    .describe("2-4 point-form takeaways, each one standalone sentence, most important first"),
   what_changed: z.array(ReportBulletSchema),
   no_meaningful_change: z
     .boolean()
     .describe("True if nothing genuinely new or meaningful was found since the previous report"),
   summary: z.string().describe("One sentence summary of this update for the history list"),
+  cover_source_ref: z
+    .number()
+    .int()
+    .nullable()
+    .describe("Index of the ONE source whose page imagery would best represent this briefing's CENTRAL development (prefer news sources). Null when no source is central enough — a tangential image is worse than none."),
 });
 export type ReportDraft = z.infer<typeof ReportDraftSchema>;
 

@@ -1,4 +1,5 @@
 import { capEntityMarkers } from "../entities";
+import { freshnessDays } from "../reports";
 import type {
   DetailLevel,
   Extract,
@@ -45,14 +46,18 @@ export async function generateReportDraft(
       "- Every bullet MUST cite supporting sources via source_refs (indexes into the provided sources array). Never cite an index that does not exist.",
       "- Never invent URLs, quotations, dates, or claims not present in the extracts.",
       "- 'what_changed' compares against the PREVIOUS report: what is new, what narrative shifted, what earlier conclusion should be revised. For a first report, state that this is the initial briefing baseline.",
-      "- cross_source_takeaway is 2-4 sentences synthesizing across all three channels.",
+      "- cross_source_takeaway: 2-4 POINT-FORM takeaways synthesizing across all three channels — each point a single standalone sentence, most important first. Not a paragraph.",
       "- Highlight KEY entities inline by wrapping them in double asterisks, e.g. **Claude Opus 5**. Mark at most 2 entities per bullet — only names central to the user's topic and interest areas (companies, products, people, places). Do NOT mark every name, and do NOT use any other markdown formatting.",
+      "- cover_source_ref: nominate the single source whose page imagery would best represent this briefing's CENTRAL development — the story the report leads with, usually its most important news source. A source that is merely background or tangential must NOT be nominated; return null instead. The reader sees this image above the report, so a mismatched image damages trust more than no image.",
       "",
       "Before finalizing, ask yourself: What did the previous report tell the user? What is genuinely new? Has the narrative changed? Is there contradictory evidence? Should an earlier conclusion be revised? Is this update important enough to surface?",
       "If nothing meaningful changed, set no_meaningful_change to true and keep the report minimal (you may leave sections empty except what_changed explaining that nothing significant happened).",
     ].join("\n"),
     input: JSON.stringify({
       now: today,
+      // Sources are pre-filtered to this window; a thin source set means a
+      // quiet window, not that the topic went silent historically.
+      source_freshness_days: freshnessDays(topic.frequency),
       topic: {
         title: topic.title,
         goal: topic.description,
@@ -73,7 +78,6 @@ export async function generateReportDraft(
 }
 
 const MAX_ENTITY_MARKS_PER_BULLET = 2;
-const MAX_ENTITY_MARKS_TAKEAWAY = 3;
 
 /**
  * Drops bullets whose source_refs point outside the extracts array
@@ -97,9 +101,14 @@ export function sanitizeDraft(draft: ReportDraft, sourceCount: number): ReportDr
     latest_developments: clampBullets(draft.latest_developments),
     community_reaction: clampBullets(draft.community_reaction),
     practitioner_view: clampBullets(draft.practitioner_view),
-    cross_source_takeaway: capEntityMarkers(
-      draft.cross_source_takeaway,
-      MAX_ENTITY_MARKS_TAKEAWAY,
+    cover_source_ref:
+      draft.cover_source_ref !== null &&
+      draft.cover_source_ref >= 0 &&
+      draft.cover_source_ref < sourceCount
+        ? draft.cover_source_ref
+        : null,
+    cross_source_takeaway: draft.cross_source_takeaway.map((point) =>
+      capEntityMarkers(point, MAX_ENTITY_MARKS_PER_BULLET),
     ),
     // what_changed may legitimately reference nothing (narrative comparison).
     what_changed: draft.what_changed.map((b) => ({

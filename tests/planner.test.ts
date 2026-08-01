@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 import type { Llm } from "@/lib/ai/llm";
 import { planFollowupQueries } from "@/lib/ai/planner";
 import type { FoundSource } from "@/lib/ai/schemas";
@@ -14,6 +14,7 @@ const topic: Topic = {
   frequency: "daily",
   status: "active",
   position: 0,
+  news_query: null,
   last_generated_at: null,
   created_at: "2026-07-20T00:00:00Z",
   updated_at: "2026-07-20T00:00:00Z",

@@ -1,3 +1,4 @@
+import { takeawayPoints } from "./reports";
 import type { KnowledgeFact, ReportSections } from "./types";
 
 /**
@@ -38,7 +39,7 @@ export function hasEntityMarkers(sections: ReportSections): boolean {
     ...sections.practitioner_view,
     ...sections.what_changed,
   ].map((b) => b.text);
-  texts.push(sections.cross_source_takeaway);
+  texts.push(...takeawayPoints(sections.cross_source_takeaway));
   return texts.some((t) => /\*\*[^*]+\*\*/.test(t));
 }
 

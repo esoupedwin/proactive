@@ -11,6 +11,7 @@ import {
 } from "../types";
 import { dedupeExtracts } from "./dedupe";
 import { extractSources } from "./extractor";
+import { filterExtractsByAge, freshnessCutoff } from "./freshness";
 import { findHeroImage, type ImageFetcher } from "./images";
 import type { TraceCollector } from "./trace";
 import type { UsageCollector } from "./usage";
@@ -109,7 +110,12 @@ export async function runReportPipeline(options: {
 
     setStage("Extracting key information");
     const extracts = await extractSources(llm, topic, found, memory);
-    const deduped = dedupeExtracts(extracts);
+    // Hard freshness guarantee: nothing verifiably older than the topic's
+    // window (derived from its update frequency) reaches the report.
+    const deduped = filterExtractsByAge(
+      dedupeExtracts(extracts),
+      freshnessCutoff(topic.frequency),
+    );
 
     setStage("Writing your briefing");
     const draft = await generateReportDraft(
@@ -130,11 +136,17 @@ export async function runReportPipeline(options: {
       no_meaningful_change: clean.no_meaningful_change,
     };
 
-    // Best-effort cover image from the most-cited source — never fails the run.
+    // Best-effort cover image — the reporter's nominated source first,
+    // then other cited sources. Never fails the run.
     if (deduped.length > 0) {
       setStage("Selecting a cover image");
       try {
-        sections.hero_image = await findHeroImage(deduped, sections, imageFetcher);
+        sections.hero_image = await findHeroImage(
+          deduped,
+          sections,
+          imageFetcher,
+          clean.cover_source_ref,
+        );
       } catch (err) {
         console.error("cover image selection failed", err);
       }

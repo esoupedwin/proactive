@@ -77,22 +77,22 @@ describe("extractImageMetaFromHtml", () => {
 });
 
 describe("rankSourcesByCitation", () => {
-  it("weights Latest Developments citations highest, appends uncited last", () => {
+  it("weights Latest Developments citations highest and excludes uncited sources", () => {
     const sections = makeSections({
       // source 2 cited once in latest (weight 3); source 0 cited twice in
-      // other sections (weight 2). Source 1 uncited.
+      // other sections (weight 2). Source 1 uncited — never a cover candidate.
       latest_developments: [{ text: "a", source_refs: [2] }],
       community_reaction: [{ text: "b", source_refs: [0] }],
       practitioner_view: [{ text: "c", source_refs: [0] }],
     });
-    expect(rankSourcesByCitation(sections, 3)).toEqual([2, 0, 1]);
+    expect(rankSourcesByCitation(sections, 3)).toEqual([2, 0]);
   });
 
-  it("ignores out-of-range refs", () => {
+  it("ignores out-of-range refs and yields nothing when nothing valid is cited", () => {
     const sections = makeSections({
       latest_developments: [{ text: "a", source_refs: [99, -1] }],
     });
-    expect(rankSourcesByCitation(sections, 2)).toEqual([0, 1]);
+    expect(rankSourcesByCitation(sections, 2)).toEqual([]);
   });
 });
 
@@ -103,6 +103,7 @@ describe("findHeroImage", () => {
   ];
   const sections = makeSections({
     latest_developments: [{ text: "x", source_refs: [1] }],
+    community_reaction: [{ text: "y", source_refs: [0] }],
   });
 
   it("returns the image of the highest-ranked source, using the page's alt as description", async () => {
@@ -119,7 +120,7 @@ describe("findHeroImage", () => {
     });
   });
 
-  it("falls back to the source title when the page has no image description", async () => {
+  it("falls back to lower-ranked cited sources, using the title when the page has no alt", async () => {
     const hero = await findHeroImage(extracts, sections, async (url) =>
       url.includes("a.com") ? { url: "https://a.com/img.jpg", alt: null } : null,
     );
@@ -129,6 +130,41 @@ describe("findHeroImage", () => {
       alt: "First",
       description: null,
     });
+  });
+
+  it("tries the reporter's nominated source first, even when lower-ranked", async () => {
+    const hero = await findHeroImage(
+      extracts,
+      sections,
+      async (url) =>
+        url.includes("a.com")
+          ? { url: "https://a.com/img.jpg", alt: null }
+          : { url: "https://b.com/img.jpg", alt: null },
+      0, // nominated: source 0, despite source 1 being the citation leader
+    );
+    expect(hero?.source_ref).toBe(0);
+  });
+
+  it("ignores an out-of-range nomination", async () => {
+    const hero = await findHeroImage(
+      extracts,
+      sections,
+      async () => ({ url: "https://img.jpg", alt: null }),
+      99,
+    );
+    expect(hero?.source_ref).toBe(1);
+  });
+
+  it("never uses an uncited source, even when it has an image", async () => {
+    const uncitedOnly = makeSections({
+      latest_developments: [{ text: "x", source_refs: [] }],
+    });
+    expect(
+      await findHeroImage(extracts, uncitedOnly, async () => ({
+        url: "https://img.jpg",
+        alt: null,
+      })),
+    ).toBeNull();
   });
 
   it("returns null when no source yields an image", async () => {

@@ -37,6 +37,10 @@ export async function runExpertOnReport(options: {
     .maybeSingle<{ sections: ReportSections | null }>();
   if (!report?.sections) return null;
 
+  // A "nothing changed" report has no new substance to teach or analyse, so
+  // running an expert on it would spend tokens restating the previous update.
+  if (report.sections.no_meaningful_change) return null;
+
   const { data: memoryRow } = await supabase
     .from("expert_memory")
     .select("memory")

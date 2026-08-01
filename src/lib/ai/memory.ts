@@ -131,7 +131,7 @@ export async function updateTopicMemory(
         open_questions: memory.open_questions,
       },
       new_report: {
-        takeaway: stripEntityMarkers(draft.cross_source_takeaway),
+        takeaway: draft.cross_source_takeaway.map((p) => stripEntityMarkers(p)),
         latest_developments: stripBullets(draft.latest_developments),
         community_reaction: stripBullets(draft.community_reaction),
         practitioner_view: stripBullets(draft.practitioner_view),

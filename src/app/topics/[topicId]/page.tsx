@@ -6,9 +6,12 @@ import { ExpertPanel, type ExpertPanelItem } from "@/components/expert-panel";
 import { GenerateButton } from "@/components/generate-button";
 import { GenerationWatcher } from "@/components/generation-watcher";
 import { LinkPending } from "@/components/link-pending";
+import { RelatedNewsButton } from "@/components/related-news-button";
 import { ReportView } from "@/components/report-view";
 import { ScreenshotButton } from "@/components/screenshot-button";
 import { SourcesDrawer } from "@/components/sources-drawer";
+import { SpeechButton } from "@/components/speech-button";
+import { buildSpeechScript } from "@/lib/speech";
 import { Badge } from "@/components/ui";
 import {
   formatDateTime,
@@ -111,7 +114,24 @@ export default async function TopicBriefingPage({
       expert,
       output: outputs.find((o) => o.expert_id === expert.id) ?? null,
     }));
+
+    // Experts don't run on a "nothing changed" report, so don't offer to run
+    // one. Outputs saved before that rule still show.
+    if (readyReport.sections?.no_meaningful_change) {
+      expertItems = expertItems.filter((item) => item.output !== null);
+    }
   }
+
+  // Built here rather than in the client so the whole briefing — including
+  // every expert's output — is in the script without a second round trip.
+  const speechScript = readyReport?.sections
+    ? buildSpeechScript({
+        topicTitle: topic.title,
+        sections: readyReport.sections,
+        reportDate: readyReport.created_at,
+        experts: expertItems,
+      })
+    : null;
 
   const screenshotName = `${topic.title
     .toLowerCase()
@@ -142,6 +162,14 @@ export default async function TopicBriefingPage({
             : "No report yet"}
         </p>
       </header>
+
+      {/* Primary actions, kept within thumb reach at the top of the briefing.
+          data-no-capture so they stay out of the screenshot. */}
+      <div data-no-capture className="mb-5 flex flex-wrap items-center gap-2">
+        <GenerateButton topicId={topic.id} compact />
+        {speechScript && <SpeechButton script={speechScript} />}
+        <RelatedNewsButton topicId={topic.id} />
+      </div>
 
       {generating && newest && (
         <GenerationWatcher reportId={newest.id} startedAt={newest.created_at} />
@@ -177,8 +205,8 @@ export default async function TopicBriefingPage({
         )
       )}
 
+      {/* Generate now lives in the action row under the title. */}
       <div className="mt-8 space-y-3 border-t border-rule pt-5">
-        <GenerateButton topicId={topic.id} />
         <div className="flex flex-wrap items-center gap-2">
           <SourcesDrawer sources={sources} />
           <Link

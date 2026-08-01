@@ -1,4 +1,5 @@
 import { stripEntityMarkers } from "../../entities";
+import { takeawayPoints } from "../../reports";
 import type { ReportSections } from "../../types";
 
 /** Flattens report sections into plain text for expert prompts. */
@@ -9,7 +10,8 @@ export function plainReportText(sections: ReportSections): string {
     ...sections.practitioner_view,
     ...sections.what_changed,
   ].map((b) => `- ${stripEntityMarkers(b.text)}`);
-  return [stripEntityMarkers(sections.cross_source_takeaway), ...bullets].join(
-    "\n",
+  const takeaway = takeawayPoints(sections.cross_source_takeaway).map(
+    (p) => stripEntityMarkers(p),
   );
+  return [...takeaway, ...bullets].join("\n");
 }

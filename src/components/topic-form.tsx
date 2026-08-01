@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useActionState, useState } from "react";
 import { Plus, X } from "lucide-react";
 import type { TopicFormState } from "@/lib/actions";
-import type { Topic } from "@/lib/types";
+import { formatDateTime, nextScheduledRun } from "@/lib/reports";
+import type { Topic, TopicStatus, UpdateFrequency } from "@/lib/types";
 import { Button, Field, Input, Select, Spinner, Textarea } from "./ui";
 
 const EMPTY_STATE: TopicFormState = {};
@@ -35,6 +36,21 @@ export function TopicForm({
   const [areas, setAreas] = useState<string[]>(() =>
     topic?.interest_areas.length ? topic.interest_areas : [""],
   );
+  const [frequency, setFrequency] = useState<UpdateFrequency>(
+    topic?.frequency ?? "daily",
+  );
+  const [status, setStatus] = useState<TopicStatus>(topic?.status ?? "active");
+
+  const nextRun = nextScheduledRun(
+    frequency,
+    status,
+    topic?.last_generated_at ?? null,
+  );
+  const nextRunHint = nextRun
+    ? `Next automatic update: ${formatDateTime(nextRun.toISOString())}.`
+    : status === "paused"
+      ? "Paused — no automatic updates."
+      : "No automatic updates — generate manually.";
 
   function updateArea(index: number, value: string) {
     setAreas((prev) => prev.map((a, i) => (i === index ? value : a)));
@@ -63,6 +79,7 @@ export function TopicForm({
           label="Topic title"
           htmlFor="title"
           error={state.fieldErrors?.title}
+          info="A short name for this topic. Shown in navigation, lists, and at the top of every report."
         >
           <Input
             id="title"
@@ -79,6 +96,7 @@ export function TopicForm({
           htmlFor="description"
           error={state.fieldErrors?.description}
           hint="Written as a goal — Proactive uses this to decide what matters."
+          info="Your research goal in your own words. The AI reads this to plan its searches and to judge which findings are worth reporting."
         >
           <Textarea
             id="description"
@@ -95,6 +113,7 @@ export function TopicForm({
           htmlFor="interest_areas_0"
           error={state.fieldErrors?.interest_areas}
           hint={`One specific angle per item, up to ${MAX_INTEREST_AREAS} items.`}
+          info="The specific angles to track within the topic. Each item steers the search queries and how findings are prioritised in reports."
         >
           <div className="space-y-2">
             {areas.map((area, index) => (
@@ -153,7 +172,11 @@ export function TopicForm({
         </Field>
 
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Detail level" htmlFor="detail_level">
+          <Field
+            label="Detail level"
+            htmlFor="detail_level"
+            info="How long each report is: Brief ≈ 3 bullets per section, Standard 3–5, Deep up to 7."
+          >
             <Select
               id="detail_level"
               name="detail_level"
@@ -165,21 +188,40 @@ export function TopicForm({
             </Select>
           </Field>
 
-          <Field label="Update frequency" htmlFor="frequency">
+          <Field
+            label="Update frequency"
+            htmlFor="frequency"
+            info="How often Proactive generates a report automatically via its daily scheduler. This also sets the source freshness window: Daily uses sources from the last 1 day, Every 3 days from the last 3, Weekly and Manual from the last 7. Manual topics only update when you press Generate Update."
+          >
             <Select
               id="frequency"
               name="frequency"
-              defaultValue={topic?.frequency ?? "daily"}
+              value={frequency}
+              onChange={(e) => setFrequency(e.target.value as UpdateFrequency)}
             >
               <option value="daily">Daily</option>
+              <option value="every_3_days">Every 3 days</option>
               <option value="weekly">Weekly</option>
               <option value="manual">Manual only</option>
             </Select>
           </Field>
         </div>
 
-        <Field label="Monitoring" htmlFor="status">
-          <Select id="status" name="status" defaultValue={topic?.status ?? "active"}>
+        <p className="text-xs text-ink-faint" role="status">
+          {nextRunHint}
+        </p>
+
+        <Field
+          label="Monitoring"
+          htmlFor="status"
+          info="The on/off switch for automatic updates. Paused topics keep all their reports and history but are skipped by the scheduler."
+        >
+          <Select
+            id="status"
+            name="status"
+            value={status}
+            onChange={(e) => setStatus(e.target.value as TopicStatus)}
+          >
             <option value="active">Active</option>
             <option value="paused">Paused</option>
           </Select>

@@ -9,10 +9,11 @@ const draft: ReportDraft = {
   ],
   community_reaction: [{ text: "mixed refs", source_refs: [1, 9] }],
   practitioner_view: [],
-  cross_source_takeaway: "takeaway",
+  cross_source_takeaway: ["takeaway"],
   what_changed: [{ text: "narrative shift, no citation", source_refs: [12] }],
   no_meaningful_change: false,
   summary: "sum",
+  cover_source_ref: 0,
 };
 
 describe("sanitizeDraft", () => {
@@ -30,19 +31,29 @@ describe("sanitizeDraft", () => {
     expect(clean.what_changed[0]!.source_refs).toEqual([]);
   });
 
-  it("caps inline entity markers per bullet and in the takeaway", () => {
+  it("caps inline entity markers per bullet and per takeaway point", () => {
     const clean = sanitizeDraft(
       {
         ...draft,
         latest_developments: [
           { text: "**A** vs **B** vs **C** vs **D**", source_refs: [0] },
         ],
-        cross_source_takeaway: "**A** **B** **C** **D**",
+        cross_source_takeaway: ["**A** **B** **C**", "**D** only"],
       },
       2,
     );
     expect(clean.latest_developments[0]!.text).toBe("**A** vs **B** vs C vs D");
-    expect(clean.cross_source_takeaway).toBe("**A** **B** **C** D");
+    expect(clean.cross_source_takeaway).toEqual(["**A** **B** C", "**D** only"]);
+  });
+
+  it("keeps a valid cover nomination and nulls an out-of-range one", () => {
+    expect(sanitizeDraft(draft, 2).cover_source_ref).toBe(0);
+    expect(
+      sanitizeDraft({ ...draft, cover_source_ref: 9 }, 2).cover_source_ref,
+    ).toBeNull();
+    expect(
+      sanitizeDraft({ ...draft, cover_source_ref: null }, 2).cover_source_ref,
+    ).toBeNull();
   });
 
   it("keeps uncited bullets when there are no sources at all", () => {

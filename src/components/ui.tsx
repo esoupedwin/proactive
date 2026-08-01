@@ -6,6 +6,7 @@ import type {
   SelectHTMLAttributes,
   TextareaHTMLAttributes,
 } from "react";
+import { FieldInfo } from "./field-info";
 
 // Small hand-rolled UI kit in an editorial, shadcn-like style.
 
@@ -83,19 +84,25 @@ export function Field({
   htmlFor,
   hint,
   error,
+  info,
   children,
 }: {
   label: string;
   htmlFor: string;
   hint?: string;
   error?: string;
+  /** Purpose of the field, shown in a tap-toggled tooltip beside the label. */
+  info?: string;
   children: ReactNode;
 }) {
   return (
     <div className="space-y-1.5">
-      <label htmlFor={htmlFor} className="block text-sm font-semibold">
-        {label}
-      </label>
+      <div className="flex flex-wrap items-center">
+        <label htmlFor={htmlFor} className="text-sm font-semibold">
+          {label}
+        </label>
+        {info && <FieldInfo label={label} text={info} />}
+      </div>
       {children}
       {hint && !error && <p className="text-xs text-ink-faint">{hint}</p>}
       {error && (

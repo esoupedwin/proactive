@@ -1,4 +1,6 @@
+import { freshnessDays } from "../reports";
 import type { Topic } from "../types";
+import { freshnessCutoff } from "./freshness";
 import type { Llm } from "./llm";
 import {
   FollowupQueriesSchema,
@@ -13,6 +15,8 @@ import {
  */
 export async function planSearches(llm: Llm, topic: Topic): Promise<SearchPlan> {
   const today = new Date().toISOString().slice(0, 10);
+  const windowDays = freshnessDays(topic.frequency);
+  const cutoff = freshnessCutoff(topic.frequency).toISOString().slice(0, 10);
 
   return llm.structured({
     tier: "search",
@@ -20,12 +24,13 @@ export async function planSearches(llm: Llm, topic: Topic): Promise<SearchPlan> 
     schemaName: "search_plan",
     instructions: [
       "You are the research planner for a personal intelligence briefing product.",
-      "Design short, specific web search queries that will surface RECENT developments (last ~7 days when possible).",
+      `Design short, specific web search queries that will surface developments from the topic's freshness window: the last ${windowDays} day(s).`,
       "News queries target mainstream/trade news. Reddit queries target community discussion. Medium queries target practitioner writing.",
       "Do not include site: operators — the channel is handled separately. Keep each query under 10 words.",
     ].join("\n"),
     input: [
       `Today's date: ${today}`,
+      `Only sources published on or after ${cutoff} will be used.`,
       `Topic: ${topic.title}`,
       `What the user wants to know: ${topic.description}`,
       `Key interest areas: ${topic.interest_areas.join("; ") || "(none specified)"}`,

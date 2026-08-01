@@ -85,9 +85,9 @@ export async function fetchOgImage(pageUrl: string): Promise<ImageMeta | null> {
 }
 
 /**
- * Orders source indexes by how much the report relies on them:
- * citations in Latest Developments count triple; uncited sources come last
- * in index order (still worth trying if cited ones have no image).
+ * Orders source indexes by how much the report relies on them: citations in
+ * Latest Developments count triple. Uncited sources are excluded entirely —
+ * a cover image from a source the report doesn't lean on reads as unrelated.
  */
 export function rankSourcesByCitation(
   sections: Pick<
@@ -109,24 +109,29 @@ export function rankSourcesByCitation(
   for (const b of sections.practitioner_view) tally(b.source_refs, 1);
   for (const b of sections.what_changed) tally(b.source_refs, 1);
 
-  const cited = [...scores.entries()]
+  return [...scores.entries()]
     .sort((a, b) => b[1] - a[1] || a[0] - b[0])
     .map(([index]) => index);
-  const uncited = Array.from({ length: sourceCount }, (_, i) => i).filter(
-    (i) => !scores.has(i),
-  );
-  return [...cited, ...uncited];
 }
 
 export type ImageFetcher = (pageUrl: string) => Promise<ImageMeta | null>;
 
-/** Finds the best available cover image for the report, or null. */
+/**
+ * Finds the best available cover image for the report, or null.
+ * `preferredRef` is the reporter's own nomination — the source it judged
+ * representative of the central development — and is always tried first.
+ */
 export async function findHeroImage(
   extracts: Extract[],
   sections: ReportSections,
   fetcher: ImageFetcher = fetchOgImage,
+  preferredRef: number | null = null,
 ): Promise<HeroImage | null> {
-  const order = rankSourcesByCitation(sections, extracts.length);
+  const ranked = rankSourcesByCitation(sections, extracts.length);
+  const order =
+    preferredRef !== null && preferredRef >= 0 && preferredRef < extracts.length
+      ? [preferredRef, ...ranked.filter((i) => i !== preferredRef)]
+      : ranked;
   for (const index of order.slice(0, MAX_ATTEMPTS)) {
     const extract = extracts[index];
     if (!extract) continue;

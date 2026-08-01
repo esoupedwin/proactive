@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { generateNewsQuery } from "./ai/news-query";
+import { openAiLlm } from "./ai/openai";
 import { SEED_TOPICS } from "./seed-data";
 import { createSupabaseServerClient } from "./supabase/server";
 import type {
@@ -33,7 +35,7 @@ const topicInputSchema = z.object({
     .min(1, "Add at least one key interest area.")
     .max(10, "Keep it to 10 interest areas or fewer."),
   detail_level: z.enum(["brief", "standard", "deep"]),
-  frequency: z.enum(["manual", "daily", "weekly"]),
+  frequency: z.enum(["manual", "daily", "every_3_days", "weekly"]),
   status: z.enum(["active", "paused"]),
 });
 
@@ -56,6 +58,29 @@ function parseTopicForm(formData: FormData) {
     status: String(formData.get("status") ?? "active"),
   };
   return topicInputSchema.safeParse(raw);
+}
+
+/**
+ * Formulates and stores the topic's reusable news-search query at setup.
+ * Best-effort — a missing OpenAI key or model hiccup never blocks saving
+ * the topic; the related-news route regenerates lazily when missing.
+ */
+async function storeNewsQuery(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  topicId: string,
+  topic: { title: string; description: string; interest_areas: string[] },
+): Promise<void> {
+  try {
+    const query = await generateNewsQuery(openAiLlm, topic);
+    if (query) {
+      await supabase
+        .from("topics")
+        .update({ news_query: query })
+        .eq("id", topicId);
+    }
+  } catch (err) {
+    console.error("news query generation failed", err);
+  }
 }
 
 async function requireUser() {
@@ -92,6 +117,9 @@ export async function createTopic(
     return { error: "Could not create the topic. Please try again." };
   }
 
+  // "Formulated when the topic is first set up" — stored for reuse.
+  await storeNewsQuery(supabase, topic.id, parsed.data);
+
   revalidatePath("/settings");
   redirect(`/topics/${topic.id}`);
 }
@@ -116,6 +144,9 @@ export async function updateTopic(
   if (error) {
     return { error: "Could not save changes. Please try again." };
   }
+
+  // The topic's scope may have changed — refresh the stored search query.
+  await storeNewsQuery(supabase, topicId, parsed.data);
 
   revalidatePath(`/topics/${topicId}`);
   revalidatePath("/settings");
