@@ -3,6 +3,7 @@ import { generateNewsQuery } from "@/lib/ai/news-query";
 import type { Llm, StructuredCallOptions } from "@/lib/ai/llm";
 import {
   braveFreshness,
+  exaToNewsResults,
   filterNewsByAge,
   markNewResults,
   parseBraveNews,
@@ -166,6 +167,37 @@ describe("freshness window", () => {
       "2026-07-31",
       "",
     ]);
+  });
+});
+
+describe("exaToNewsResults", () => {
+  it("maps Exa results to normalized news results", () => {
+    const results = exaToNewsResults([
+      {
+        title: "Anwar targets Negeri Sembilan MB decision",
+        url: "https://www.malaymail.com/news/anwar-ns",
+        publishedDate: "2026-08-01T10:00:00.000Z",
+        author: "Reporter",
+        text: "Full article text here.",
+        highlights: ["key passage one", "key passage two"],
+      },
+      {
+        title: "",
+        url: "https://example.com/untitled",
+        text: "Some article body without a title or highlights.",
+      },
+    ]);
+
+    expect(results[0]).toEqual({
+      title: "Anwar targets Negeri Sembilan MB decision",
+      url: "https://www.malaymail.com/news/anwar-ns",
+      source: "malaymail.com",
+      published: "2026-08-01T10:00:00.000Z",
+      description: "key passage one … key passage two",
+    });
+    // Missing title falls back to the url; description falls back to text.
+    expect(results[1]!.title).toBe("https://example.com/untitled");
+    expect(results[1]!.description).toContain("without a title");
   });
 });
 

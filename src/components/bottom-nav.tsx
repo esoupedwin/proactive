@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Settings } from "lucide-react";
+import { version } from "../../package.json";
+import { InfoButton } from "./info-button";
 import { LinkPending } from "./link-pending";
 
 export interface NavTopic {
@@ -37,6 +39,8 @@ export function BottomNav({
             <Settings className="size-5" aria-hidden />
           </LinkPending>
         </Link>
+
+        <InfoButton version={version} />
 
         <div className="flex min-w-0 flex-1 items-center justify-end gap-1">
           {hasSiblings && prev ? (

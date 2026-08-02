@@ -1,10 +1,11 @@
 import { normalizeUrl } from "./ai/dedupe";
 import { cutoffForDays } from "./ai/freshness";
+import type { ExaResult } from "./agents/exa";
 
 /**
- * Direct news search via Brave Search or SerpApi (whichever key is
- * configured), used by the "Related news" popup. Separate from the report
- * pipeline's OpenAI web search.
+ * Direct news search for the "Related news" popup — Exa (semantic) when
+ * EXA_API_KEY is set, falling back to Brave Search or SerpApi. Separate from
+ * the agents' own search tools.
  */
 
 // SerpApi runs live scrapes — first uncached query can take 10-20s.
@@ -35,6 +36,29 @@ export function configuredNewsProvider(): NewsProvider | null {
 }
 
 const stripHtml = (text: string) => text.replace(/<[^>]+>/g, "");
+
+/** Exa results → normalized news results. Pure + testable. */
+export function exaToNewsResults(results: ExaResult[]): NewsResult[] {
+  return results.flatMap((result) => {
+    if (!result.url) return [];
+    let source = "";
+    try {
+      source = new URL(result.url).hostname.replace(/^www\./i, "");
+    } catch {
+      // keep empty source for unparseable urls
+    }
+    return [
+      {
+        title: result.title || result.url,
+        url: result.url,
+        source,
+        published: result.publishedDate ?? "",
+        description:
+          result.highlights?.join(" … ") ?? result.text?.slice(0, 240) ?? "",
+      },
+    ];
+  });
+}
 
 /** Brave news response → normalized results. Pure + testable. */
 export function parseBraveNews(json: unknown): NewsResult[] {

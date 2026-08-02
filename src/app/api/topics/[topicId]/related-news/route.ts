@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
+import { createExaSearcher } from "@/lib/agents/exa";
 import { generateNewsQuery } from "@/lib/ai/news-query";
 import { openAiLlm } from "@/lib/ai/openai";
 import {
   configuredNewsProvider,
+  exaToNewsResults,
   filterNewsByAge,
   markNewResults,
   searchNews,
+  type NewsResult,
 } from "@/lib/news-search";
 import { freshnessDays } from "@/lib/reports";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -13,10 +16,13 @@ import type { Topic } from "@/lib/types";
 
 export const maxDuration = 60;
 
+const MAX_RESULTS = 10;
+
 /**
- * GET /api/topics/[topicId]/related-news — direct news search (Brave/SerpApi)
- * using the topic's stored query, with each result flagged as new or already
- * collected in this topic's sources.
+ * GET /api/topics/[topicId]/related-news — direct news search using the
+ * topic's stored query: Exa semantic search when EXA_API_KEY is set
+ * (Brave/SerpApi as fallback), with each result flagged as new or already
+ * collected in this topic's extract store.
  */
 export async function GET(
   _request: Request,
@@ -32,11 +38,11 @@ export async function GET(
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  if (!configuredNewsProvider()) {
+  if (!process.env.EXA_API_KEY && !configuredNewsProvider()) {
     return NextResponse.json(
       {
         error:
-          "No news search provider configured. Set BRAVE_SEARCH_API_KEY or SERPAPI_API_KEY.",
+          "No news search provider configured. Set EXA_API_KEY (or BRAVE_SEARCH_API_KEY / SERPAPI_API_KEY).",
       },
       { status: 501 },
     );
@@ -73,8 +79,21 @@ export async function GET(
   try {
     // Same freshness window as report generation: derived from frequency.
     const windowDays = freshnessDays(topic.frequency);
-    const { provider, results } = await searchNews(query, windowDays);
-    const inWindow = filterNewsByAge(results, windowDays).slice(0, 10);
+    let provider: string;
+    let results: NewsResult[];
+    if (process.env.EXA_API_KEY) {
+      provider = "exa";
+      results = exaToNewsResults(
+        await createExaSearcher().search(query, {
+          daysBack: windowDays,
+          category: "news",
+          numResults: MAX_RESULTS,
+        }),
+      );
+    } else {
+      ({ provider, results } = await searchNews(query, windowDays));
+    }
+    const inWindow = filterNewsByAge(results, windowDays).slice(0, MAX_RESULTS);
 
     const { data: urlRows } = await supabase
       .from("extracts")
