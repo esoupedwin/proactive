@@ -1,8 +1,8 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
-  setDefaultModelProvider,
   Usage,
   type Model,
+  type ModelProvider,
   type ModelResponse,
 } from "@openai/agents";
 import { createInMemoryExtractStore } from "@/lib/agents/extract-store";
@@ -79,30 +79,25 @@ function makeFakeModel(turns: OutputItem[][]): Model {
   } as Model;
 }
 
-// The SDK's default runner captures the model provider on FIRST run() call,
-// so register one provider up front and swap the model it serves per test.
-let currentModel: Model | null = null;
-setDefaultModelProvider({
-  getModel: () => {
-    if (!currentModel) throw new Error("no fake model configured");
-    return currentModel;
-  },
-});
-
-function useFakeModel(turns: OutputItem[][]) {
-  currentModel = makeFakeModel(turns);
+// Injected via each run function's modelProvider test seam.
+function fakeProvider(turns: OutputItem[][]): ModelProvider {
+  const model = makeFakeModel(turns);
+  return { getModel: () => model };
 }
 
-function useFailingModel() {
-  currentModel = {
-    async getResponse(): Promise<ModelResponse> {
-      throw new Error("model unavailable");
-    },
-    // eslint-disable-next-line require-yield
-    async *getStreamedResponse() {
-      throw new Error("model unavailable");
-    },
-  } as Model;
+function failingProvider(): ModelProvider {
+  return {
+    getModel: () =>
+      ({
+        async getResponse(): Promise<ModelResponse> {
+          throw new Error("model unavailable");
+        },
+        // eslint-disable-next-line require-yield
+        async *getStreamedResponse() {
+          throw new Error("model unavailable");
+        },
+      }) as Model,
+  };
 }
 
 function makeMemoryPersistence() {
@@ -146,7 +141,7 @@ beforeAll(() => {
 describe("info tracker run", () => {
   it("records extracts via tools and persists subtopic memory", async () => {
     const store = createInMemoryExtractStore();
-    useFakeModel([
+    const modelProvider = fakeProvider([
       [
         functionCall(
           "record_extract",
@@ -182,6 +177,7 @@ describe("info tracker run", () => {
       topic,
       usage,
       trace,
+      modelProvider,
     });
 
     expect(result.ok).toBe(true);
@@ -199,11 +195,11 @@ describe("info tracker run", () => {
 
   it("returns ok:false instead of throwing when the run fails", async () => {
     const store = createInMemoryExtractStore();
-    useFailingModel();
     const result = await runInfoTracker({
       store,
       exa: { search: vi.fn(async () => []) },
       topic,
+      modelProvider: failingProvider(),
     });
     expect(result.ok).toBe(false);
     expect(result.error).toBeTruthy();
@@ -225,7 +221,7 @@ describe("reporter run", () => {
       contradiction: "",
     });
 
-    useFakeModel([
+    const modelProvider = fakeProvider([
       [functionCall("get_new_extracts", {}, "call-1")],
       [
         functionCall(
@@ -266,6 +262,7 @@ describe("reporter run", () => {
       reportId: "report-1",
       usage,
       imageFetcher: async () => null,
+      modelProvider,
     });
 
     expect(result.ok).toBe(true);
@@ -285,13 +282,13 @@ describe("reporter run", () => {
 
   it("fails the report row when the agent produces no output", async () => {
     const store = createInMemoryExtractStore();
-    useFailingModel();
     const { persistence, state } = makeMemoryPersistence();
     const result = await runReporter({
       persistence,
       store,
       topic,
       reportId: "report-2",
+      modelProvider: failingProvider(),
     });
     expect(result.ok).toBe(false);
     expect(state.failed).toBeTruthy();

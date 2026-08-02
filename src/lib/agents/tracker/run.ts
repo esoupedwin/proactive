@@ -1,12 +1,16 @@
-import { run } from "@openai/agents";
+import { Runner, type ModelProvider } from "@openai/agents";
 import type { TraceCollector } from "../../ai/trace";
 import type { UsageCollector } from "../../ai/usage";
 import type { Topic } from "../../types";
-import { initAgentsSdk, trackerModel } from "../client";
+import {
+  createOpenAiModelProvider,
+  initAgentsSdk,
+  trackerModel,
+} from "../client";
 import type { ExaSearcher } from "../exa";
 import type { ExtractStore } from "../extract-store";
 import type { TrackerFinal } from "../schemas";
-import { recordAgentRun, type AgentModelResponse } from "../usage-adapter";
+import { createTracingModelProvider } from "../usage-adapter";
 import { buildTrackerAgent, type TrackerCounters } from "./agent";
 
 export interface TrackerRunResult {
@@ -31,11 +35,12 @@ export async function runInfoTracker(options: {
   usage?: UsageCollector;
   trace?: TraceCollector;
   maxTurns?: number;
+  /** Test seam — real runs default to the OpenAI provider. */
+  modelProvider?: ModelProvider;
 }): Promise<TrackerRunResult> {
   const { store, exa, topic, usage, trace } = options;
   const counters: TrackerCounters = { created: 0, merged: 0 };
   const startedAt = new Date().toISOString();
-  const startMs = Date.now();
   const model = trackerModel();
 
   try {
@@ -52,21 +57,22 @@ export async function runInfoTracker(options: {
     });
 
     const input = `Find and record what is new for this topic. Today is ${startedAt}.`;
-    const result = await run(agent, input, {
-      maxTurns: options.maxTurns ?? DEFAULT_MAX_TURNS,
+    // Model turns are traced live (usage-adapter), so the trace reads in
+    // true chronological order: turn → its web searches → tool calls.
+    const runner = new Runner({
+      modelProvider: createTracingModelProvider({
+        inner: options.modelProvider ?? createOpenAiModelProvider(),
+        usage,
+        trace,
+        tier: "search",
+        model,
+        agentName: "info-tracker",
+        instructions: agent.instructions as string,
+        input,
+      }),
     });
-
-    recordAgentRun({
-      responses: result.rawResponses as unknown as AgentModelResponse[],
-      usage,
-      trace,
-      tier: "search",
-      model,
-      agentName: "info-tracker",
-      instructions: agent.instructions as string,
-      input,
-      startedAt,
-      durationMs: Date.now() - startMs,
+    const result = await runner.run(agent, input, {
+      maxTurns: options.maxTurns ?? DEFAULT_MAX_TURNS,
     });
 
     const final = result.finalOutput as TrackerFinal | undefined;

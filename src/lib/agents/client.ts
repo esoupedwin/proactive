@@ -1,8 +1,10 @@
 import OpenAI from "openai";
 import {
+  OpenAIProvider,
   setDefaultOpenAIClient,
   setOpenAIAPI,
   setTracingDisabled,
+  type ModelProvider,
 } from "@openai/agents";
 
 /**
@@ -34,6 +36,14 @@ export function initAgentsSdk(): void {
   setOpenAIAPI("responses");
   setTracingDisabled(true);
   sdkReady = true;
+}
+
+/** Model provider for real runs (tests inject a fake one instead). */
+export function createOpenAiModelProvider(): ModelProvider {
+  return new OpenAIProvider({
+    openAIClient: getSharedOpenAI(),
+    useResponses: true,
+  });
 }
 
 /** Info Tracker model — cheap search tier. */

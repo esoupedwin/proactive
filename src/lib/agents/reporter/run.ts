@@ -1,13 +1,17 @@
-import { run } from "@openai/agents";
+import { Runner, type ModelProvider } from "@openai/agents";
 import { findHeroImage, type ImageFetcher } from "../../ai/images";
 import type { TraceCollector } from "../../ai/trace";
 import type { UsageCollector } from "../../ai/usage";
 import type { Extract, ExtractRecord, ReportSections, Topic } from "../../types";
-import { initAgentsSdk, reporterModel } from "../client";
+import {
+  createOpenAiModelProvider,
+  initAgentsSdk,
+  reporterModel,
+} from "../client";
 import type { ExtractStore } from "../extract-store";
 import type { ReporterPersistence } from "../report-store";
 import type { ReporterFinal } from "../schemas";
-import { recordAgentRun, type AgentModelResponse } from "../usage-adapter";
+import { createTracingModelProvider } from "../usage-adapter";
 import { buildReporterAgent } from "./agent";
 import { composeReport } from "./compose";
 import type { ReporterToolDeps } from "./tools";
@@ -51,10 +55,11 @@ export async function runReporter(options: {
   trace?: TraceCollector;
   imageFetcher?: ImageFetcher;
   maxTurns?: number;
+  /** Test seam — real runs default to the OpenAI provider. */
+  modelProvider?: ModelProvider;
 }): Promise<ReporterRunResult> {
   const { persistence, store, topic, reportId, usage, trace } = options;
   const startedAt = new Date().toISOString();
-  const startMs = Date.now();
   const model = reporterModel();
 
   const persistUsage = async () => {
@@ -113,21 +118,22 @@ export async function runReporter(options: {
     });
 
     setStage("Assessing what it means");
-    const result = await run(agent, input, {
-      maxTurns: options.maxTurns ?? DEFAULT_MAX_TURNS,
+    // Model turns are traced live (usage-adapter), so the trace reads in
+    // true chronological order: turn → its web searches → tool calls.
+    const runner = new Runner({
+      modelProvider: createTracingModelProvider({
+        inner: options.modelProvider ?? createOpenAiModelProvider(),
+        usage,
+        trace,
+        tier: "report",
+        model,
+        agentName: "reporter",
+        instructions: agent.instructions as string,
+        input,
+      }),
     });
-
-    recordAgentRun({
-      responses: result.rawResponses as unknown as AgentModelResponse[],
-      usage,
-      trace,
-      tier: "report",
-      model,
-      agentName: "reporter",
-      instructions: agent.instructions as string,
-      input,
-      startedAt,
-      durationMs: Date.now() - startMs,
+    const result = await runner.run(agent, input, {
+      maxTurns: options.maxTurns ?? DEFAULT_MAX_TURNS,
     });
 
     const final = result.finalOutput as ReporterFinal | undefined;
