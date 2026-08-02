@@ -10,17 +10,40 @@ import type { UsageCollector } from "../ai/usage";
 /** Structural subset of the SDK's ModelResponse — keeps us duck-typed. */
 export interface AgentModelResponse {
   usage: { inputTokens?: number; outputTokens?: number };
-  output: Array<{ type?: string; name?: string }>;
+  output: Array<{
+    type?: string;
+    name?: string;
+    providerData?: Record<string, unknown>;
+  }>;
+}
+
+function isWebSearchItem(item: AgentModelResponse["output"][number]): boolean {
+  return (
+    item?.type === "hosted_tool_call" &&
+    typeof item.name === "string" &&
+    item.name.includes("web_search")
+  );
 }
 
 /** Hosted web-search calls issued in one model turn. */
 export function countWebSearchCalls(output: AgentModelResponse["output"]): number {
-  return output.filter(
-    (item) =>
-      item?.type === "hosted_tool_call" &&
-      typeof item.name === "string" &&
-      item.name.includes("web_search"),
-  ).length;
+  return output.filter(isWebSearchItem).length;
+}
+
+/**
+ * What a hosted web-search call actually did — the SDK keeps the Responses
+ * API's `action` (search query / opened page) in providerData.
+ */
+export function describeWebSearch(
+  item: AgentModelResponse["output"][number],
+): string {
+  const action = item.providerData?.action as
+    | { type?: string; query?: string; url?: string }
+    | undefined;
+  if (action?.query) return `Searched: "${action.query}"`;
+  if (action?.url) return `Opened: ${action.url}`;
+  if (action?.type) return `Action: ${action.type}`;
+  return "Web search (no action details reported)";
 }
 
 /**
@@ -64,6 +87,25 @@ export function recordAgentRun(options: {
       started_at: options.startedAt,
       duration_ms: options.durationMs,
     });
+    // One entry per hosted web search, so the activity page can show what
+    // was actually searched (tokens are already counted on the turn above).
+    for (const item of response.output ?? []) {
+      if (!isWebSearchItem(item)) continue;
+      trace?.record({
+        stage: "web_search",
+        agent: options.agentName,
+        tier: options.tier,
+        model: options.model,
+        instructions: "",
+        input: describeWebSearch(item),
+        used_web_search: true,
+        web_search_calls: 1,
+        input_tokens: 0,
+        output_tokens: 0,
+        started_at: options.startedAt,
+        duration_ms: 0,
+      });
+    }
   });
 }
 

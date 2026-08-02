@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Bot, Coins, History, Layers, Pencil, Terminal } from "lucide-react";
+import { Activity, Bot, Coins, History, Layers, Pencil } from "lucide-react";
 import { BottomNav } from "@/components/bottom-nav";
 import { ExpertPanel, type ExpertPanelItem } from "@/components/expert-panel";
 import { GenerateButton } from "@/components/generate-button";
@@ -270,9 +270,9 @@ export default async function TopicBriefingPage({
             className="inline-flex min-h-11 items-center gap-2 rounded-md border border-rule px-4 text-sm font-medium hover:bg-neutral-100"
           >
             <LinkPending>
-              <Terminal className="size-4" aria-hidden />
+              <Activity className="size-4" aria-hidden />
             </LinkPending>{" "}
-            Prompts
+            Activity
           </Link>
           <Link
             href={`/topics/${topic.id}/experts`}
