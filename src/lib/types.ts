@@ -101,6 +101,15 @@ export interface LlmCallTrace {
   started_at: string;
   duration_ms: number;
   error?: string;
+  /** URLs a hosted web search consulted. Absent on non-search calls and on
+   *  traces stored before sources were requested. */
+  search_results?: SearchResult[];
+}
+
+/** One URL returned by a search, for the activity view. */
+export interface SearchResult {
+  url: string;
+  title?: string;
 }
 
 export interface ReportTrace {

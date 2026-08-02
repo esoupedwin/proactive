@@ -1,6 +1,7 @@
 import type { Model, ModelProvider } from "@openai/agents";
 import type { TraceCollector } from "../ai/trace";
 import type { UsageCollector } from "../ai/usage";
+import type { SearchResult } from "../types";
 
 /**
  * Adapts Agents SDK model turns and tool calls onto the app's existing
@@ -45,6 +46,40 @@ export function describeWebSearch(
   if (action?.url) return `Opened: ${action.url}`;
   if (action?.type) return `Action: ${action.type}`;
   return "Web search (no action details reported)";
+}
+
+/**
+ * URLs a hosted search actually consulted. Only present when the request asked
+ * for them via `include: ["web_search_call.action.sources"]` (see the tracker
+ * agent) — older stored traces and open_page actions simply have none.
+ *
+ * The field is documented as a list of sources but its element shape is not
+ * guaranteed, so accept a bare URL string or an object and skip anything else.
+ */
+export function webSearchSources(
+  item: AgentModelResponse["output"][number],
+): SearchResult[] {
+  const action = item.providerData?.action as { sources?: unknown } | undefined;
+  if (!Array.isArray(action?.sources)) return [];
+
+  const seen = new Set<string>();
+  const results: SearchResult[] = [];
+  for (const raw of action.sources) {
+    const source =
+      typeof raw === "string"
+        ? { url: raw }
+        : (raw as { url?: unknown; title?: unknown } | null);
+    const url = typeof source?.url === "string" ? source.url : null;
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    results.push({
+      url,
+      ...(typeof source?.title === "string" && source.title
+        ? { title: source.title }
+        : {}),
+    });
+  }
+  return results;
 }
 
 /**
@@ -122,6 +157,7 @@ export function createTracingModelProvider(options: {
       // actually searched (tokens are already counted on the turn above).
       for (const item of output) {
         if (!isWebSearchItem(item)) continue;
+        const results = webSearchSources(item);
         trace?.record({
           stage: "web_search",
           agent: options.agentName,
@@ -135,6 +171,7 @@ export function createTracingModelProvider(options: {
           output_tokens: 0,
           started_at: startedAt,
           duration_ms: 0,
+          ...(results.length > 0 ? { search_results: results } : {}),
         });
       }
       return response;

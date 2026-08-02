@@ -73,6 +73,13 @@ export function buildTrackerAgent(options: {
     model,
     instructions: trackerInstructions(deps.topic, options.recentSubtopics),
     outputType: TrackerFinalSchema,
+    // Ask the Responses API to report which URLs each hosted search consulted,
+    // so the activity view can show results and not just the query. providerData
+    // is passed straight through to the request; the SDK contributes nothing to
+    // `include` for web search, so setting it here clobbers nothing.
+    modelSettings: {
+      providerData: { include: ["web_search_call.action.sources"] },
+    },
     tools: [
       webSearchTool(),
       tool({
