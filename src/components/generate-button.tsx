@@ -187,8 +187,9 @@ export function GenerateButton({
           className={clsx(
             "text-xs font-medium",
             // In compact mode the parent is `contents`, so this lands directly
-            // in the action row — full width makes it wrap onto its own line.
-            compact && "w-full",
+            // in the action row — full width puts it on its own line, and
+            // order-first lifts it ABOVE the whole button row.
+            compact && "order-first w-full",
             state === "error" ? "text-red-700" : "text-emerald-700",
           )}
         >
