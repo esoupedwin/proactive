@@ -63,9 +63,7 @@ export function createOpenAiLlm(
           model: requestedModel,
           instructions: options.instructions,
           input: options.input,
-          tools: options.useWebSearch
-            ? [{ type: "web_search_preview" }]
-            : undefined,
+          tools: options.useWebSearch ? [{ type: "web_search" }] : undefined,
           text: {
             // zodTextFormat expects a ZodObject-compatible schema at runtime.
             format: zodTextFormat(options.schema as never, options.schemaName),

@@ -19,6 +19,8 @@ const DEFAULT_PRICING: Record<string, { input: number; output: number }> = {
   "gpt-4o": { input: 2.5, output: 10 },
   "gpt-4.1-mini": { input: 0.4, output: 1.6 },
   "gpt-4.1": { input: 2, output: 8 },
+  "text-embedding-3-small": { input: 0.02, output: 0 },
+  "text-embedding-3-large": { input: 0.13, output: 0 },
 };
 
 /** USD per web_search tool call ($10 per 1k calls). */

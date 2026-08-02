@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
+import { createOpenAiEmbedder } from "@/lib/agents/embeddings";
+import { createSupabaseExtractStore } from "@/lib/agents/extract-store";
+import { createSupabaseReporterPersistence } from "@/lib/agents/report-store";
+import { runReporter } from "@/lib/agents/reporter/run";
 import { createOpenAiLlm } from "@/lib/ai/openai";
-import {
-  createSupabaseReportStore,
-  runReportPipeline,
-} from "@/lib/ai/pipeline";
 import { runActiveExpertsForReport } from "@/lib/ai/experts/runner";
 import { createTraceCollector } from "@/lib/ai/trace";
 import { createUsageCollector } from "@/lib/ai/usage";
@@ -17,7 +17,9 @@ export const maxDuration = 300;
 const MAX_TOPICS_PER_RUN = 5;
 
 /**
- * GET /api/cron — scheduled report generation (see vercel.json).
+ * GET /api/cron — scheduled Reporter runs (see vercel.json).
+ * The Info Tracker runs on its own pg_cron schedule (/api/cron/tracker);
+ * this route only turns accumulated extracts into reports.
  * Authenticated with `Authorization: Bearer ${CRON_SECRET}`, which Vercel
  * sends automatically when the CRON_SECRET env var is set.
  */
@@ -72,10 +74,9 @@ export async function GET(request: Request) {
 
     const usage = createUsageCollector();
     const trace = createTraceCollector();
-    const llm = createOpenAiLlm(usage, trace);
-    const result = await runReportPipeline({
-      llm,
-      store: createSupabaseReportStore(supabase),
+    const result = await runReporter({
+      persistence: createSupabaseReporterPersistence(supabase),
+      store: createSupabaseExtractStore(supabase, createOpenAiEmbedder(usage)),
       topic,
       reportId: report.id,
       usage,
@@ -86,7 +87,7 @@ export async function GET(request: Request) {
       try {
         const ran = await runActiveExpertsForReport({
           supabase,
-          llm,
+          llm: createOpenAiLlm(usage, trace),
           topic,
           reportId: report.id,
           usage,

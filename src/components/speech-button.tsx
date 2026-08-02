@@ -70,7 +70,10 @@ export function SpeechButton({ script }: { script: string }) {
               value={script}
               aria-label="Speech script"
               onFocus={(e) => e.currentTarget.select()}
-              className="min-h-0 flex-1 resize-none rounded-md border border-rule bg-neutral-50 px-3 py-2.5 text-sm leading-relaxed text-ink-soft focus:border-ink focus:outline-none"
+              /* min-h gives the sheet its size: the container is capped with
+                 max-h but has no height, so flex-1 alone collapses this to
+                 the textarea's default two rows. */
+              className="min-h-[45dvh] flex-1 resize-none rounded-md border border-rule bg-neutral-50 px-3 py-2.5 text-sm leading-relaxed text-ink-soft focus:border-ink focus:outline-none"
             />
 
             <button

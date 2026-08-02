@@ -5,7 +5,7 @@ import { LinkPending } from "@/components/link-pending";
 import { Badge } from "@/components/ui";
 import { formatDateTime, paginate } from "@/lib/reports";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import type { Source, SourceType, Topic } from "@/lib/types";
+import type { ExtractRecord, SourceType, Topic } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +17,16 @@ const TYPE_LABEL: Record<SourceType, string> = {
   medium: "Medium",
 };
 
-/** All extracts collected for a topic across reports, newest first, paginated. */
+/** Readable source site, e.g. "reuters.com", when no publisher was recorded. */
+function sourceHost(url: string): string | null {
+  try {
+    return new URL(url).hostname.replace(/^www\./i, "");
+  } catch {
+    return null;
+  }
+}
+
+/** The topic's persistent extract store (Info Tracker output), newest first, paginated. */
 export default async function TopicExtractsPage({
   params,
   searchParams,
@@ -37,7 +46,7 @@ export default async function TopicExtractsPage({
   if (!topic) notFound();
 
   const { count } = await supabase
-    .from("sources")
+    .from("extracts")
     .select("id", { count: "exact", head: true })
     .eq("topic_id", topicId);
   const total = count ?? 0;
@@ -48,15 +57,15 @@ export default async function TopicExtractsPage({
     PAGE_SIZE,
   );
 
-  let extracts: Source[] = [];
+  let extracts: ExtractRecord[] = [];
   if (total > 0) {
     const { data } = await supabase
-      .from("sources")
+      .from("extracts")
       .select("*")
       .eq("topic_id", topicId)
       .order("created_at", { ascending: false })
       .range(from, to);
-    extracts = (data ?? []) as Source[];
+    extracts = (data ?? []) as ExtractRecord[];
   }
 
   const pageHref = (p: number) => `/topics/${topicId}/extracts?page=${p}`;
@@ -75,14 +84,15 @@ export default async function TopicExtractsPage({
         </Link>
         <h1 className="text-2xl font-bold tracking-tight">Extracts</h1>
         <p className="mt-1 text-xs text-ink-faint">
-          {total} extract{total === 1 ? "" : "s"} collected across all reports,
-          newest first.
+          {total} extract{total === 1 ? "" : "s"} recorded by the Info
+          Tracker, newest first.
         </p>
       </header>
 
       {extracts.length === 0 ? (
         <p className="rounded-md border border-rule bg-neutral-50 px-4 py-8 text-center text-sm text-ink-faint">
-          No extracts yet. Generate an update to start collecting.
+          No extracts yet. The Info Tracker records them on its schedule, or
+          generate an update to collect some now.
         </p>
       ) : (
         <ul className="divide-y divide-rule">
@@ -92,6 +102,9 @@ export default async function TopicExtractsPage({
                 <Badge>{TYPE_LABEL[extract.source_type]}</Badge>
                 {(extract.novelty === "new" || extract.novelty === "update") && (
                   <Badge tone="active">{extract.novelty}</Badge>
+                )}
+                {extract.corroborations > 0 && (
+                  <Badge>×{extract.corroborations + 1} sources</Badge>
                 )}
                 <span className="text-xs text-ink-faint">
                   Collected {formatDateTime(extract.created_at)}
@@ -106,7 +119,10 @@ export default async function TopicExtractsPage({
                 {extract.title}
               </a>
               <p className="mt-0.5 text-xs text-ink-faint">
-                {[extract.publisher, extract.published_at]
+                {[
+                  extract.publisher || sourceHost(extract.url),
+                  extract.published_at,
+                ]
                   .filter(Boolean)
                   .join(" · ")}
               </p>

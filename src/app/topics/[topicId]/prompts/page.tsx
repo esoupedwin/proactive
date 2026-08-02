@@ -2,27 +2,130 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { LinkPending } from "@/components/link-pending";
+import { PromptFlowTabs } from "@/components/prompt-flow-tabs";
 import { Badge } from "@/components/ui";
 import { formatDateTime, formatTokens } from "@/lib/reports";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import type { Report, Topic } from "@/lib/types";
+import type { LlmCallTrace, Report, Topic } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-/** Friendly names for the pipeline stages (structured-output schema names). */
+/** Friendly names for known stages (tools, legacy pipeline, experts). */
 const STAGE_LABEL: Record<string, string> = {
+  // Info Tracker tools
+  "tool:exa_search": "Exa semantic web search",
+  "tool:search_existing_extracts": "Check store for duplicates",
+  "tool:record_extract": "Record extract",
+  "tool:corroborate_extract": "Corroborate extract",
+  // Reporter tools
+  "tool:get_new_extracts": "Read new extracts since last report",
+  "tool:search_extracts": "Search the extract store",
+  "tool:record_assessment": "Record assessment",
+  "tool:get_recent_assessments": "Recall recent assessments",
+  // Experts
+  mentor_tips: "Mentor — teaching tips",
+  mentor_more: "Mentor — deeper explanation",
+  analyst_analysis: "Analyst — interpret the report",
+  // Legacy pipeline stages (older stored traces)
   search_plan: "Topic planner — build search queries",
   followup_queries: "Follow-up planner — target queries from news findings",
   seek_result: "Information seeker — web search",
   extraction_result: "Extractor — structure the found sources",
   report_draft: "Update reporter — write the briefing",
   memory_update: "Memory updater — fold report into topic memory",
-  mentor_tips: "Mentor — teaching tips",
-  mentor_more: "Mentor — deeper explanation",
-  analyst_analysis: "Analyst — interpret the report",
 };
 
-/** The OpenAI prompt flow behind the topic's latest report. */
+function stageLabel(stage: string): string {
+  const known = STAGE_LABEL[stage];
+  if (known) return known;
+  const turn = stage.match(/^agent_turn:[^ ]+ \((.+)\)$/);
+  if (turn) return `Model turn ${turn[1]}`;
+  return stage;
+}
+
+/** Tracker tool stages, for traces recorded before the agent field existed. */
+const TRACKER_STAGES = new Set([
+  "tool:exa_search",
+  "tool:search_existing_extracts",
+  "tool:record_extract",
+  "tool:corroborate_extract",
+]);
+
+function isTrackerCall(call: LlmCallTrace): boolean {
+  if (call.agent) return call.agent === "info-tracker";
+  return (
+    call.stage.startsWith("agent_turn:info-tracker") ||
+    TRACKER_STAGES.has(call.stage)
+  );
+}
+
+function CallList({
+  calls,
+  emptyMessage,
+}: {
+  calls: LlmCallTrace[];
+  emptyMessage: string;
+}) {
+  if (calls.length === 0) {
+    return (
+      <p className="rounded-md border border-rule bg-neutral-50 px-4 py-8 text-center text-sm text-ink-faint">
+        {emptyMessage}
+      </p>
+    );
+  }
+  return (
+    <ol className="space-y-4">
+      {calls.map((call) => (
+        <li key={call.index} className="rounded-md border border-rule bg-paper">
+          <div className="border-b border-rule px-4 py-3">
+            <p className="text-sm font-semibold leading-snug">
+              {call.index}. {stageLabel(call.stage)}
+            </p>
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              <Badge>{call.model}</Badge>
+              <Badge>{call.tier} tier</Badge>
+              {call.used_web_search && (
+                <Badge tone="active">
+                  {call.web_search_calls} web search
+                  {call.web_search_calls === 1 ? "" : "es"}
+                </Badge>
+              )}
+              {call.error && <Badge tone="paused">failed</Badge>}
+            </div>
+            <p className="mt-1.5 text-xs text-ink-faint">
+              {(call.duration_ms / 1000).toFixed(1)}s ·{" "}
+              {formatTokens(call.input_tokens)} in /{" "}
+              {formatTokens(call.output_tokens)} out
+            </p>
+            {call.error && (
+              <p className="mt-1 text-xs text-red-700">{call.error}</p>
+            )}
+          </div>
+
+          <details className="border-b border-rule">
+            <summary className="cursor-pointer px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-ink-soft hover:bg-neutral-50">
+              Instructions (system prompt)
+            </summary>
+            <pre className="max-h-80 overflow-auto whitespace-pre-wrap border-t border-rule bg-neutral-50 px-4 py-3 font-mono text-xs leading-relaxed">
+              {call.instructions}
+            </pre>
+          </details>
+
+          <details>
+            <summary className="cursor-pointer px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-ink-soft hover:bg-neutral-50">
+              Input (task content)
+            </summary>
+            <pre className="max-h-80 overflow-auto whitespace-pre-wrap border-t border-rule bg-neutral-50 px-4 py-3 font-mono text-xs leading-relaxed">
+              {call.input}
+            </pre>
+          </details>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/** The OpenAI prompt flow behind the topic's latest report, split by agent. */
 export default async function PromptsPage({
   params,
 }: {
@@ -48,6 +151,10 @@ export default async function PromptsPage({
     .maybeSingle<Pick<Report, "id" | "created_at" | "status" | "trace">>();
 
   const calls = report?.trace?.calls ?? [];
+  const trackerCalls = calls.filter(isTrackerCall);
+  // Reporter tab also carries expert calls (they run as part of reporting)
+  // and any legacy-pipeline stages.
+  const reporterCalls = calls.filter((c) => !isTrackerCall(c));
 
   return (
     <main className="px-5 pb-16 pt-6">
@@ -64,7 +171,7 @@ export default async function PromptsPage({
         <h1 className="text-2xl font-bold tracking-tight">Prompt flow</h1>
         <p className="mt-1 text-xs text-ink-faint">
           {report
-            ? `Every OpenAI call behind the report of ${formatDateTime(report.created_at)}, in order.`
+            ? `Every OpenAI call behind the report of ${formatDateTime(report.created_at)}, in order, per agent.`
             : "No report yet."}
         </p>
       </header>
@@ -76,57 +183,32 @@ export default async function PromptsPage({
           flow here.
         </p>
       ) : (
-        <ol className="space-y-4">
-          {calls.map((call) => (
-            <li
-              key={call.index}
-              className="rounded-md border border-rule bg-paper"
-            >
-              <div className="border-b border-rule px-4 py-3">
-                <p className="text-sm font-semibold leading-snug">
-                  {call.index}. {STAGE_LABEL[call.stage] ?? call.stage}
-                </p>
-                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                  <Badge>{call.model}</Badge>
-                  <Badge>{call.tier} tier</Badge>
-                  {call.used_web_search && (
-                    <Badge tone="active">
-                      {call.web_search_calls} web search
-                      {call.web_search_calls === 1 ? "" : "es"}
-                    </Badge>
-                  )}
-                  {call.error && <Badge tone="paused">failed</Badge>}
-                </div>
-                <p className="mt-1.5 text-xs text-ink-faint">
-                  {(call.duration_ms / 1000).toFixed(1)}s ·{" "}
-                  {formatTokens(call.input_tokens)} in /{" "}
-                  {formatTokens(call.output_tokens)} out
-                </p>
-                {call.error && (
-                  <p className="mt-1 text-xs text-red-700">{call.error}</p>
-                )}
-              </div>
-
-              <details className="border-b border-rule">
-                <summary className="cursor-pointer px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-ink-soft hover:bg-neutral-50">
-                  Instructions (system prompt)
-                </summary>
-                <pre className="max-h-80 overflow-auto whitespace-pre-wrap border-t border-rule bg-neutral-50 px-4 py-3 font-mono text-xs leading-relaxed">
-                  {call.instructions}
-                </pre>
-              </details>
-
-              <details>
-                <summary className="cursor-pointer px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-ink-soft hover:bg-neutral-50">
-                  Input (task content)
-                </summary>
-                <pre className="max-h-80 overflow-auto whitespace-pre-wrap border-t border-rule bg-neutral-50 px-4 py-3 font-mono text-xs leading-relaxed">
-                  {call.input}
-                </pre>
-              </details>
-            </li>
-          ))}
-        </ol>
+        <PromptFlowTabs
+          tabs={[
+            {
+              key: "tracker",
+              label: "Info Tracker",
+              count: trackerCalls.length,
+              content: (
+                <CallList
+                  calls={trackerCalls}
+                  emptyMessage="The Info Tracker didn't run inside this generation — it had run recently on its own schedule, so the Reporter worked from already-collected extracts."
+                />
+              ),
+            },
+            {
+              key: "reporter",
+              label: "Reporter",
+              count: reporterCalls.length,
+              content: (
+                <CallList
+                  calls={reporterCalls}
+                  emptyMessage="No Reporter calls recorded for this report."
+                />
+              ),
+            },
+          ]}
+        />
       )}
     </main>
   );

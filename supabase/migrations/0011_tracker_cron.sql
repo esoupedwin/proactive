@@ -1,0 +1,41 @@
+-- Info Tracker scheduling: Supabase pg_cron + pg_net call the app's tracker
+-- endpoint on a sub-daily cadence (decoupled from the daily Vercel report cron).
+-- Run in the Supabase SQL editor.
+
+create extension if not exists pg_cron;
+create extension if not exists pg_net;
+
+-- ============================================================
+-- ONE-TIME MANUAL STEP (not part of this migration — needs your
+-- deployed URL and CRON_SECRET, which must not be committed).
+-- Run the following in the SQL editor after deploying:
+--
+--   select vault.create_secret('https://<your-app>.vercel.app', 'app_base_url');
+--   select vault.create_secret('<CRON_SECRET value>', 'app_cron_secret');
+--
+--   select cron.schedule(
+--     'info-tracker',
+--     '0 */6 * * *',  -- every 6 hours
+--     $job$
+--     select net.http_get(
+--       url := (select decrypted_secret from vault.decrypted_secrets
+--               where name = 'app_base_url') || '/api/cron/tracker',
+--       headers := jsonb_build_object(
+--         'Authorization',
+--         'Bearer ' || (select decrypted_secret from vault.decrypted_secrets
+--                       where name = 'app_cron_secret')
+--       ),
+--       timeout_milliseconds := 5000
+--     );
+--     $job$
+--   );
+--
+-- Notes:
+--  * pg_net is fire-and-forget: the 5s timeout only covers the request
+--    handshake; the Vercel function keeps running after it.
+--  * Rotating CRON_SECRET requires updating the 'app_cron_secret' vault
+--    secret: select vault.update_secret(id, new_secret := '...') using the
+--    id from vault.secrets.
+--  * To inspect: select * from cron.job;  select * from net._http_response
+--    order by created desc limit 10;
+-- ============================================================

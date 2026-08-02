@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { normalizeUrl } from "./ai/dedupe";
 import { generateNewsQuery } from "./ai/news-query";
 import { openAiLlm } from "./ai/openai";
 import { SEED_TOPICS } from "./seed-data";
@@ -10,6 +11,7 @@ import { createSupabaseServerClient } from "./supabase/server";
 import type {
   DetailLevel,
   Expert,
+  FeedbackRating,
   MentorFocus,
   MentorLevel,
   MentorMemoryData,
@@ -397,6 +399,42 @@ export async function mentorTipFeedback(
 }
 
 // ---------------------------------------------------------------------------
+// Report feedback (the Reporter agent reads this on its next run)
+// ---------------------------------------------------------------------------
+
+export async function submitReportFeedback(
+  reportId: string,
+  rating: FeedbackRating,
+  comment?: string,
+): Promise<void> {
+  if (rating !== "up" && rating !== "down") return;
+  const { supabase, user } = await requireUser();
+
+  // RLS scopes this to the caller's own reports.
+  const { data: report } = await supabase
+    .from("reports")
+    .select("id, topic_id")
+    .eq("id", reportId)
+    .maybeSingle<{ id: string; topic_id: string }>();
+  if (!report) return;
+
+  const trimmed = comment?.trim().slice(0, 1000) || null;
+  await supabase.from("report_feedback").upsert(
+    {
+      report_id: report.id,
+      topic_id: report.topic_id,
+      user_id: user.id,
+      rating,
+      comment: trimmed,
+      created_at: new Date().toISOString(),
+    },
+    { onConflict: "report_id,user_id" },
+  );
+
+  revalidatePath(`/topics/${report.topic_id}`);
+}
+
+// ---------------------------------------------------------------------------
 // Profile
 // ---------------------------------------------------------------------------
 
@@ -511,6 +549,31 @@ export async function seedSampleTopics(): Promise<void> {
             ...s,
           })),
         );
+
+        // Mirror seed sources into the persistent extract store so the
+        // extracts page isn't empty before the first tracker run. No
+        // embeddings (keyword search still works); duplicates are ignored.
+        try {
+          await supabase.from("extracts").upsert(
+            report.sources.map((s) => ({
+              topic_id: topic.id,
+              user_id: user.id,
+              source_type: s.source_type,
+              title: s.title,
+              publisher: s.publisher || null,
+              url: s.url,
+              canonical_url: normalizeUrl(s.url),
+              published_at: s.published_at || null,
+              gist: s.gist,
+              relevance: s.relevance || null,
+              novelty: s.novelty === "repeat" ? null : s.novelty,
+              created_at: createdAt,
+            })),
+            { onConflict: "topic_id,canonical_url", ignoreDuplicates: true },
+          );
+        } catch (err) {
+          console.error("seeding extracts failed", err);
+        }
       }
     }
 

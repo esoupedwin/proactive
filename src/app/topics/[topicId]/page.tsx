@@ -7,6 +7,7 @@ import { GenerateButton } from "@/components/generate-button";
 import { GenerationWatcher } from "@/components/generation-watcher";
 import { LinkPending } from "@/components/link-pending";
 import { RelatedNewsButton } from "@/components/related-news-button";
+import { ReportFeedback } from "@/components/report-feedback";
 import { ReportView } from "@/components/report-view";
 import { ScreenshotButton } from "@/components/screenshot-button";
 import { SourcesDrawer } from "@/components/sources-drawer";
@@ -24,6 +25,7 @@ import type {
   Expert,
   ExpertOutput,
   Report,
+  ReportFeedback as ReportFeedbackRow,
   Source,
   Topic,
   TopicMemory,
@@ -82,9 +84,15 @@ export default async function TopicBriefingPage({
   let sources: Source[] = [];
   let fallbackEntities: string[] = [];
   let expertItems: ExpertPanelItem[] = [];
+  let feedback: Pick<ReportFeedbackRow, "rating" | "comment"> | null = null;
   if (readyReport) {
-    const [{ data }, { data: memory }, { data: expertRows }, { data: outputRows }] =
-      await Promise.all([
+    const [
+      { data },
+      { data: memory },
+      { data: expertRows },
+      { data: outputRows },
+      { data: feedbackRow },
+    ] = await Promise.all([
         supabase
           .from("sources")
           .select("*")
@@ -105,8 +113,14 @@ export default async function TopicBriefingPage({
           .from("expert_outputs")
           .select("*")
           .eq("report_id", readyReport.id),
+        supabase
+          .from("report_feedback")
+          .select("rating, comment")
+          .eq("report_id", readyReport.id)
+          .maybeSingle<Pick<ReportFeedbackRow, "rating" | "comment">>(),
       ]);
     sources = (data ?? []) as Source[];
+    feedback = feedbackRow ?? null;
     fallbackEntities = keyEntitiesFromMemory(memory?.facts ?? []);
 
     const outputs = (outputRows ?? []) as ExpertOutput[];
@@ -169,6 +183,16 @@ export default async function TopicBriefingPage({
         <GenerateButton topicId={topic.id} compact />
         {speechScript && <SpeechButton script={speechScript} />}
         <RelatedNewsButton topicId={topic.id} />
+        <Link
+          href={`/topics/${topic.id}/extracts`}
+          aria-label="View all extracts for this topic"
+          title="View all extracts for this topic"
+          className="inline-flex size-11 items-center justify-center rounded-md border border-rule hover:bg-neutral-100"
+        >
+          <LinkPending>
+            <Layers className="size-5" aria-hidden />
+          </LinkPending>
+        </Link>
       </div>
 
       {generating && newest && (
@@ -193,6 +217,11 @@ export default async function TopicBriefingPage({
             fallbackEntities={fallbackEntities}
           />
           <ExpertPanel items={expertItems} reportId={readyReport.id} />
+          <ReportFeedback
+            reportId={readyReport.id}
+            initialRating={feedback?.rating ?? null}
+            initialComment={feedback?.comment ?? null}
+          />
         </>
       ) : (
         !generating && (

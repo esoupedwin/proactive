@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
+import { createOpenAiEmbedder } from "@/lib/agents/embeddings";
+import { createExaSearcher } from "@/lib/agents/exa";
+import { createSupabaseExtractStore } from "@/lib/agents/extract-store";
+import { createSupabaseReporterPersistence } from "@/lib/agents/report-store";
+import { runReporter } from "@/lib/agents/reporter/run";
+import { runInfoTracker } from "@/lib/agents/tracker/run";
 import { createOpenAiLlm } from "@/lib/ai/openai";
-import {
-  createSupabaseReportStore,
-  runReportPipeline,
-} from "@/lib/ai/pipeline";
 import { runActiveExpertsForReport } from "@/lib/ai/experts/runner";
 import { createTraceCollector } from "@/lib/ai/trace";
 import { createUsageCollector } from "@/lib/ai/usage";
@@ -11,8 +13,16 @@ import { isGenerationLocked } from "@/lib/reports";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Report, Topic } from "@/lib/types";
 
-// Report generation makes several model + web-search calls.
+// The two agent runs make several model + tool calls.
 export const maxDuration = 300;
+
+// Run the tracker inline only when its last run is older than this — an
+// on-demand generate is the user asking "what's new NOW", but repeat clicks
+// shouldn't re-search the web every time.
+const TRACKER_STALE_MINUTES = 60;
+// Inline tracker is tighter than the scheduled one to protect the reporter's
+// share of the 300s budget.
+const INLINE_TRACKER_MAX_TURNS = 8;
 
 /** POST /api/topics/[topicId]/generate — manually trigger a new update. */
 export async function POST(
@@ -70,10 +80,39 @@ export async function POST(
 
   const usage = createUsageCollector();
   const trace = createTraceCollector();
-  const llm = createOpenAiLlm(usage, trace);
-  const result = await runReportPipeline({
-    llm,
-    store: createSupabaseReportStore(supabase),
+  const store = createSupabaseExtractStore(
+    supabase,
+    createOpenAiEmbedder(usage),
+  );
+  const persistence = createSupabaseReporterPersistence(supabase);
+
+  // Freshness: run the Info Tracker inline when it hasn't run recently.
+  // Failure is non-fatal — extracts from previous cycles still exist.
+  try {
+    const trackerState = await store.getAgentState(topic.id, "tracker");
+    const lastRun = trackerState.last_run_at
+      ? Date.parse(trackerState.last_run_at)
+      : 0;
+    if (Date.now() - lastRun > TRACKER_STALE_MINUTES * 60_000) {
+      await persistence
+        .setStage?.(report.id, "Scanning for new developments")
+        .catch(() => {});
+      await runInfoTracker({
+        store,
+        exa: createExaSearcher(),
+        topic,
+        usage,
+        trace,
+        maxTurns: INLINE_TRACKER_MAX_TURNS,
+      });
+    }
+  } catch (err) {
+    console.error("inline tracker failed", err);
+  }
+
+  const result = await runReporter({
+    persistence,
+    store,
     topic,
     reportId: report.id,
     usage,
@@ -92,7 +131,7 @@ export async function POST(
   try {
     const ran = await runActiveExpertsForReport({
       supabase,
-      llm,
+      llm: createOpenAiLlm(usage, trace),
       topic,
       reportId: report.id,
       usage,

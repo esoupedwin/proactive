@@ -88,6 +88,8 @@ export interface LlmCallTrace {
   index: number;
   /** Pipeline stage — the structured-output schema name (e.g. "report_draft"). */
   stage: string;
+  /** Which agent produced this call ("info-tracker" | "reporter"); absent for expert/legacy calls. */
+  agent?: string;
   tier: "search" | "report";
   model: string;
   instructions: string;
@@ -321,4 +323,66 @@ export interface Extract {
   relevance: string;
   novelty: "new" | "update" | "repeat";
   contradiction: string;
+}
+
+// ---- Agentic backend (Info Tracker + Reporter) -----------------------------
+
+/** A row in the persistent, topic-scoped extract store (extracts table). */
+export interface ExtractRecord {
+  id: string;
+  topic_id: string;
+  user_id: string;
+  source_type: SourceType;
+  title: string;
+  publisher: string | null;
+  url: string;
+  /** Normalized url (dedupe key within a topic). */
+  canonical_url: string;
+  published_at: string | null;
+  gist: string;
+  relevance: string | null;
+  novelty: string | null;
+  contradiction: string | null;
+  corroborations: number;
+  corroborating_urls: string[];
+  duplicate_of: string | null;
+  created_at: string;
+  last_seen_at: string;
+}
+
+export type AssessmentSignificance = "high" | "medium" | "low";
+
+/** The Reporter's judgement of what one extract means for the topic. */
+export interface Assessment {
+  id: string;
+  extract_id: string;
+  topic_id: string;
+  user_id: string;
+  report_id: string | null;
+  assessment: string;
+  significance: AssessmentSignificance;
+  created_at: string;
+}
+
+export type AgentName = "tracker" | "reporter";
+
+/** Per-agent memory stored in agent_state.state (jsonb). */
+export interface AgentStateData {
+  /** Recent key subtopics of the topic, most active first. */
+  recent_subtopics?: string[];
+  /** Reporter only: max extracts.created_at already processed. */
+  cursor?: string;
+  last_run_at?: string;
+}
+
+export type FeedbackRating = "up" | "down";
+
+export interface ReportFeedback {
+  id: string;
+  report_id: string;
+  topic_id: string;
+  user_id: string;
+  rating: FeedbackRating;
+  comment: string | null;
+  created_at: string;
 }

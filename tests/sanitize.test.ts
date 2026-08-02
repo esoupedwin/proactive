@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { sanitizeDraft } from "@/lib/ai/reporter";
-import type { ReportDraft } from "@/lib/ai/schemas";
+import { sanitizeDraft } from "@/lib/agents/reporter/compose";
+import type { ReportDraft } from "@/lib/agents/schemas";
 
 const draft: ReportDraft = {
   latest_developments: [

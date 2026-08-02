@@ -77,7 +77,7 @@ export async function GET(
     const inWindow = filterNewsByAge(results, windowDays).slice(0, 10);
 
     const { data: urlRows } = await supabase
-      .from("sources")
+      .from("extracts")
       .select("url")
       .eq("topic_id", topic.id)
       .limit(1000);
