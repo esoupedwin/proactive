@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Activity, Bot, Coins, History, Layers, Pencil } from "lucide-react";
+import { AgentMemoryButton } from "@/components/agent-memory-button";
 import { BottomNav } from "@/components/bottom-nav";
 import { ExpertPanel, type ExpertPanelItem } from "@/components/expert-panel";
 import { GenerateButton } from "@/components/generate-button";
@@ -22,6 +23,7 @@ import {
 import { keyEntitiesFromMemory } from "@/lib/entities";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type {
+  AgentStateData,
   Expert,
   ExpertOutput,
   Report,
@@ -60,19 +62,33 @@ export default async function TopicBriefingPage({
     .update({ last_viewed_topic_id: topic.id })
     .eq("id", user.id);
 
-  const [{ data: navTopics }, { data: latestReports }] = await Promise.all([
-    supabase
-      .from("topics")
-      .select("id, title")
-      .order("position")
-      .order("created_at"),
-    supabase
-      .from("reports")
-      .select("*")
-      .eq("topic_id", topic.id)
-      .order("created_at", { ascending: false })
-      .limit(5),
-  ]);
+  const [{ data: navTopics }, { data: latestReports }, { data: agentStates }] =
+    await Promise.all([
+      supabase
+        .from("topics")
+        .select("id, title")
+        .order("position")
+        .order("created_at"),
+      supabase
+        .from("reports")
+        .select("*")
+        .eq("topic_id", topic.id)
+        .order("created_at", { ascending: false })
+        .limit(5),
+      supabase
+        .from("agent_state")
+        .select("agent, state")
+        .eq("topic_id", topic.id),
+    ]);
+
+  const stateRows = (agentStates ?? []) as {
+    agent: string;
+    state: AgentStateData;
+  }[];
+  const trackerMemory =
+    stateRows.find((row) => row.agent === "tracker")?.state ?? null;
+  const reporterMemory =
+    stateRows.find((row) => row.agent === "reporter")?.state ?? null;
 
   const reports = (latestReports ?? []) as Report[];
   const readyReport = reports.find((r) => r.status === "ready") ?? null;
@@ -193,6 +209,7 @@ export default async function TopicBriefingPage({
             <Layers className="size-5" aria-hidden />
           </LinkPending>
         </Link>
+        <AgentMemoryButton tracker={trackerMemory} reporter={reporterMemory} />
       </div>
 
       {generating && newest && (
@@ -216,12 +233,12 @@ export default async function TopicBriefingPage({
             sources={sources}
             fallbackEntities={fallbackEntities}
           />
-          <ExpertPanel items={expertItems} reportId={readyReport.id} />
           <ReportFeedback
             reportId={readyReport.id}
             initialRating={feedback?.rating ?? null}
             initialComment={feedback?.comment ?? null}
           />
+          <ExpertPanel items={expertItems} reportId={readyReport.id} />
         </>
       ) : (
         !generating && (
