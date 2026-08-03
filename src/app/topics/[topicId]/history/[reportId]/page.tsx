@@ -70,6 +70,7 @@ export default async function ReportDetailPage({
         sections={report.sections}
         sources={sources}
         fallbackEntities={fallbackEntities}
+        question={topic.analytical_question}
       />
 
       <div className="mt-8 border-t border-rule pt-5">

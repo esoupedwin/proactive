@@ -1,8 +1,10 @@
 import { Agent, tool } from "@openai/agents";
 import type { TraceCollector } from "../../ai/trace";
 import type { DetailLevel, Topic } from "../../types";
+import { renderAnalyticalQuestion, renderInterestFrame } from "../frame";
 import {
   EmptyParamsSchema,
+  QuestionReporterFinalSchema,
   RecordAssessmentParamsSchema,
   ReporterFinalSchema,
   SearchExtractsParamsSchema,
@@ -33,7 +35,7 @@ export function reporterInstructions(
     "",
     `Topic: ${topic.title}`,
     `Goal: ${topic.description}`,
-    `Interest areas: ${topic.interest_areas.join(", ")}`,
+    ...renderInterestFrame(topic.interest_frame),
     recentSubtopics.length > 0
       ? `Recently active subtopics: ${recentSubtopics.join(", ")}`
       : "",
@@ -66,6 +68,54 @@ export function reporterInstructions(
     .join("\n");
 }
 
+/**
+ * Question-mode instructions: the report is a baseline assessment of the
+ * topic's analytical question, synthesized against the interest frame,
+ * rather than a rolling news briefing.
+ */
+export function questionReporterInstructions(
+  topic: Topic,
+  recentSubtopics: string[],
+): string {
+  return [
+    "You are the Reporter for Proactive, a personal research companion. This topic is configured to ANSWER A QUESTION: your job is to weigh ALL consolidated evidence against the interest frame and give the current best answer. A separate Info Tracker agent has already gathered extracts into the data store — you work from those extracts only.",
+    DETAIL_GUIDANCE[topic.detail_level],
+    "",
+    `Topic: ${topic.title}`,
+    `Goal: ${topic.description}`,
+    ...renderAnalyticalQuestion(topic),
+    ...renderInterestFrame(topic.interest_frame),
+    recentSubtopics.length > 0
+      ? `Recently active subtopics: ${recentSubtopics.join(", ")}`
+      : "",
+    "",
+    "Workflow:",
+    "1. Call get_new_extracts — everything recorded since your last report.",
+    "2. Use search_extracts per frame factor to pull the CONSOLIDATED evidence for that factor (new and old — an assessment weighs the whole record, not just this week). Use get_recent_assessments to recall your earlier judgements.",
+    "3. For each significant new extract, call record_assessment: what it means for the question and how significant it is.",
+    "4. Produce the final structured assessment, citing extracts by their id in extract_ids.",
+    "",
+    "Assessment rules:",
+    "- factor_assessments: one entry per frame factor that has meaningful evidence, using the EXACT factor name; answer the factor's key question from the evidence, cited. Skip factors with no evidence rather than padding.",
+    "- verdict: the overall answer to the analytical question, following from the factor assessments. likelihood says how likely the questioned outcome is; confidence says how strongly the evidence supports the call; rationale lists the strongest drivers, cited, most decisive first.",
+    "- verdict.trend: 'baseline' when the input has no previous_verdict. Otherwise compare against previous_verdict: strengthened (same call, firmer), weakened (same call, shakier), reversed (the call flipped), or unchanged.",
+    "- what_changed compares against the PREVIOUS assessment: which factors moved and why the verdict did or did not shift. For a baseline, state that this is the initial assessment.",
+    "- Weigh evidence by source: news extracts for reported developments; Reddit is community sentiment (never verified fact); Medium is practitioner interpretation. Corroborated extracts count for more; contradictions must be surfaced, not averaged away.",
+    "- Distinguish confirmed developments from speculation, and state uncertainty explicitly (e.g. 'reportedly', 'unconfirmed'). Do not overstate confidence — 'possible / low confidence' is a legitimate verdict.",
+    "- Every bullet MUST cite supporting extracts via extract_ids. Only use ids returned by your tools — never invent one.",
+    "- Never invent URLs, quotations, dates, or claims not present in the extracts.",
+    "- Highlight KEY entities inline by wrapping them in double asterisks, e.g. **UMNO**. Mark at most 2 entities per bullet — only names central to the question. Do NOT use any other markdown formatting.",
+    "- cover_extract_id: nominate the single extract whose page imagery would best represent the assessment's central evidence, or null.",
+    "- If the input includes user_feedback, adjust emphasis, tone, and format accordingly.",
+    "",
+    "Before finalizing, ask yourself: Does the verdict follow from the factor assessments? Would a skeptic agree the trend call is justified by what actually changed? Is contradictory evidence acknowledged?",
+    "If nothing new bears on the question, set no_meaningful_change to true, keep factor_assessments minimal, and restate the standing verdict with trend 'unchanged'.",
+    "Always finish with key_subtopics — the currently-active subtopics, which become your memory for the next run.",
+  ]
+    .filter((line) => line !== "")
+    .join("\n");
+}
+
 export function buildReporterAgent(options: {
   deps: ReporterToolDeps;
   model: string;
@@ -74,12 +124,15 @@ export function buildReporterAgent(options: {
 }) {
   const { deps, model, trace } = options;
   const traced = { trace, tier: "report" as const, model, agent: "reporter" };
+  const question = deps.topic.watch_mode === "question";
 
   return new Agent({
     name: "reporter",
     model,
-    instructions: reporterInstructions(deps.topic, options.recentSubtopics),
-    outputType: ReporterFinalSchema,
+    instructions: question
+      ? questionReporterInstructions(deps.topic, options.recentSubtopics)
+      : reporterInstructions(deps.topic, options.recentSubtopics),
+    outputType: question ? QuestionReporterFinalSchema : ReporterFinalSchema,
     tools: [
       tool({
         name: "get_new_extracts",

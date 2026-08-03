@@ -113,12 +113,28 @@ export function TopicRow({ topic }: { topic: Topic }) {
           <p className="mt-1 leading-relaxed text-ink-soft">
             {topic.description || "—"}
           </p>
-          {topic.interest_areas.length > 0 && (
+          {topic.watch_mode === "question" && topic.analytical_question && (
             <>
-              <p className="mt-3 font-semibold">Key interest areas:</p>
+              <p className="mt-3 font-semibold">Answering:</p>
+              <p className="mt-1 leading-relaxed text-ink-soft">
+                {topic.analytical_question}
+              </p>
+            </>
+          )}
+          {topic.interest_frame.length > 0 && (
+            <>
+              <p className="mt-3 font-semibold">Interest frame:</p>
               <ul className="mt-1 list-inside list-disc space-y-0.5 text-ink-soft">
-                {topic.interest_areas.map((area) => (
-                  <li key={area}>{area}</li>
+                {topic.interest_frame.map((factor) => (
+                  <li key={factor.name}>
+                    {factor.name}
+                    {factor.key_question && (
+                      <span className="text-ink-faint">
+                        {" "}
+                        — {factor.key_question}
+                      </span>
+                    )}
+                  </li>
                 ))}
               </ul>
             </>

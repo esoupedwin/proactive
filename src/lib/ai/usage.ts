@@ -87,6 +87,85 @@ export function estimateCostUsd(
   return Math.round(cost * 10_000) / 10_000;
 }
 
+/**
+ * Cost of the priced portion of a usage record, plus the models that had no
+ * configured price. Unlike `estimateCostUsd` this never collapses to null —
+ * an all-time total stays useful when a single model is missing from the
+ * table, at the cost of being a floor rather than an exact figure.
+ */
+export function estimatePartialCostUsd(
+  byModel: Record<string, ModelUsage>,
+  webSearchCalls: number,
+): { cost: number; unpricedModels: string[] } {
+  let cost = webSearchCalls * WEB_SEARCH_COST_PER_CALL;
+  const unpricedModels: string[] = [];
+  for (const [model, usage] of Object.entries(byModel)) {
+    const price = pricingFor(model);
+    if (!price) {
+      unpricedModels.push(model);
+      continue;
+    }
+    cost +=
+      (usage.input_tokens / 1_000_000) * price.input +
+      (usage.output_tokens / 1_000_000) * price.output;
+  }
+  return { cost: Math.round(cost * 10_000) / 10_000, unpricedModels };
+}
+
+/** Lifetime total across many stored usage records. */
+export interface UsageTotals extends ReportUsage {
+  /** How many non-null usage records were folded in. */
+  runs: number;
+  /** Models whose tokens are counted but whose cost is not (no price configured). */
+  unpriced_models: string[];
+}
+
+/**
+ * Folds every stored usage record into one total — e.g. every report a user
+ * has generated. Counters are summed as recorded; cost is re-priced from the
+ * merged per-model tokens so it always reflects the current price table.
+ */
+export function sumUsage(
+  records: readonly (ReportUsage | null | undefined)[],
+): UsageTotals {
+  const byModel: Record<string, ModelUsage> = {};
+  const totals = { calls: 0, input: 0, output: 0, searches: 0, runs: 0 };
+
+  for (const record of records) {
+    if (!record) continue;
+    totals.runs += 1;
+    totals.calls += record.calls;
+    totals.input += record.input_tokens;
+    totals.output += record.output_tokens;
+    totals.searches += record.web_search_calls;
+    for (const [model, usage] of Object.entries(record.by_model)) {
+      const entry = (byModel[model] ??= {
+        calls: 0,
+        input_tokens: 0,
+        output_tokens: 0,
+      });
+      entry.calls += usage.calls;
+      entry.input_tokens += usage.input_tokens;
+      entry.output_tokens += usage.output_tokens;
+    }
+  }
+
+  const { cost, unpricedModels } = estimatePartialCostUsd(
+    byModel,
+    totals.searches,
+  );
+  return {
+    calls: totals.calls,
+    input_tokens: totals.input,
+    output_tokens: totals.output,
+    web_search_calls: totals.searches,
+    by_model: byModel,
+    estimated_cost_usd: cost,
+    runs: totals.runs,
+    unpriced_models: unpricedModels,
+  };
+}
+
 /** Usage consumed between two snapshots of the same collector (e.g. one expert's run). */
 export function diffUsage(before: ReportUsage, after: ReportUsage): ReportUsage {
   const byModel: Record<string, ModelUsage> = {};

@@ -2,23 +2,57 @@
 
 import Link from "next/link";
 import { useActionState, useState } from "react";
-import { Plus, X } from "lucide-react";
-import type { TopicFormState } from "@/lib/actions";
+import { Plus, Sparkles, X } from "lucide-react";
+import { draftInterestFrame, type TopicFormState } from "@/lib/actions";
 import { formatDateTime, nextScheduledRun } from "@/lib/reports";
-import type { Topic, TopicStatus, UpdateFrequency } from "@/lib/types";
+import type {
+  InterestFactor,
+  Topic,
+  TopicStatus,
+  UpdateFrequency,
+  WatchMode,
+} from "@/lib/types";
 import { Button, Field, Input, Select, Spinner, Textarea } from "./ui";
 
 const EMPTY_STATE: TopicFormState = {};
 
-const MAX_INTEREST_AREAS = 10;
+const MAX_FACTORS = 10;
 
-const AREA_PLACEHOLDERS = [
-  "e.g. Top models for reasoning",
-  "e.g. Top models for coding",
-  "e.g. Efficiency and cost",
-  "e.g. Agentic capabilities",
-  "e.g. Rumors about upcoming models",
+/** A factor as edited in the form — indicators as one comma-separated text. */
+interface FactorDraft {
+  name: string;
+  key_question: string;
+  indicators: string;
+}
+
+const EMPTY_FACTOR: FactorDraft = { name: "", key_question: "", indicators: "" };
+
+const FACTOR_PLACEHOLDERS = [
+  "e.g. Political Incentives",
+  "e.g. Internal Party Dynamics",
+  "e.g. Elite Relationships",
+  "e.g. Coalition Arithmetic",
+  "e.g. Trigger Events",
 ];
+
+function toDraft(factor: InterestFactor): FactorDraft {
+  return {
+    name: factor.name,
+    key_question: factor.key_question,
+    indicators: factor.indicators.join(", "),
+  };
+}
+
+function toFactor(draft: FactorDraft): InterestFactor {
+  return {
+    name: draft.name.trim(),
+    key_question: draft.key_question.trim(),
+    indicators: draft.indicators
+      .split(/[,;]/)
+      .map((i) => i.trim())
+      .filter(Boolean),
+  };
+}
 
 /** Shared add/edit topic form backed by a server action. */
 export function TopicForm({
@@ -33,13 +67,20 @@ export function TopicForm({
   submitLabel: string;
 }) {
   const [state, formAction, pending] = useActionState(action, EMPTY_STATE);
-  const [areas, setAreas] = useState<string[]>(() =>
-    topic?.interest_areas.length ? topic.interest_areas : [""],
+  const [factors, setFactors] = useState<FactorDraft[]>(() =>
+    topic?.interest_frame.length
+      ? topic.interest_frame.map(toDraft)
+      : [{ ...EMPTY_FACTOR }],
+  );
+  const [watchMode, setWatchMode] = useState<WatchMode>(
+    topic?.watch_mode ?? "monitor",
   );
   const [frequency, setFrequency] = useState<UpdateFrequency>(
     topic?.frequency ?? "daily",
   );
   const [status, setStatus] = useState<TopicStatus>(topic?.status ?? "active");
+  const [drafting, setDrafting] = useState(false);
+  const [draftError, setDraftError] = useState<string | null>(null);
 
   const nextRun = nextScheduledRun(
     frequency,
@@ -52,20 +93,48 @@ export function TopicForm({
       ? "Paused — no automatic updates."
       : "No automatic updates — generate manually.";
 
-  function updateArea(index: number, value: string) {
-    setAreas((prev) => prev.map((a, i) => (i === index ? value : a)));
-  }
+  // The server action reads the frame from this single hidden JSON field.
+  const frameJson = JSON.stringify(
+    factors.map(toFactor).filter((f) => f.name !== ""),
+  );
 
-  function removeArea(index: number) {
-    setAreas((prev) =>
-      prev.length > 1 ? prev.filter((_, i) => i !== index) : [""],
+  function updateFactor(index: number, patch: Partial<FactorDraft>) {
+    setFactors((prev) =>
+      prev.map((f, i) => (i === index ? { ...f, ...patch } : f)),
     );
   }
 
-  function addArea() {
-    setAreas((prev) =>
-      prev.length < MAX_INTEREST_AREAS ? [...prev, ""] : prev,
+  function removeFactor(index: number) {
+    setFactors((prev) =>
+      prev.length > 1 ? prev.filter((_, i) => i !== index) : [{ ...EMPTY_FACTOR }],
     );
+  }
+
+  function addFactor() {
+    setFactors((prev) =>
+      prev.length < MAX_FACTORS ? [...prev, { ...EMPTY_FACTOR }] : prev,
+    );
+  }
+
+  async function suggestFrame(form: HTMLFormElement | null) {
+    if (!form || drafting) return;
+    const data = new FormData(form);
+    setDrafting(true);
+    setDraftError(null);
+    try {
+      const result = await draftInterestFrame({
+        title: String(data.get("title") ?? ""),
+        description: String(data.get("description") ?? ""),
+        analytical_question: String(data.get("analytical_question") ?? ""),
+      });
+      if (result.factors?.length) {
+        setFactors(result.factors.map(toDraft));
+      } else {
+        setDraftError(result.error ?? "No suggestions — try adding detail.");
+      }
+    } finally {
+      setDrafting(false);
+    }
   }
 
   return (
@@ -109,67 +178,139 @@ export function TopicForm({
         </Field>
 
         <Field
-          label="Key interest areas"
-          htmlFor="interest_areas_0"
-          error={state.fieldErrors?.interest_areas}
-          hint={`One specific angle per item, up to ${MAX_INTEREST_AREAS} items.`}
-          info="The specific angles to track within the topic. Each item steers the search queries and how findings are prioritised in reports."
+          label="How should Proactive watch this?"
+          htmlFor="watch_mode"
+          info="Monitor keeps you up to date with a classic briefing. Answer a question makes every report an assessment: findings are weighed against the interest frame to answer your analytical question."
         >
-          <div className="space-y-2">
-            {areas.map((area, index) => (
-              <div key={index} className="flex items-center gap-2">
-                <Input
-                  id={`interest_areas_${index}`}
-                  name="interest_areas"
-                  value={area}
-                  onChange={(e) => updateArea(index, e.target.value)}
-                  onKeyDown={(e) => {
-                    // Enter adds the next item instead of submitting the form.
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      addArea();
+          <Select
+            id="watch_mode"
+            name="watch_mode"
+            value={watchMode}
+            onChange={(e) => setWatchMode(e.target.value as WatchMode)}
+          >
+            <option value="monitor">Monitor developments</option>
+            <option value="question">Answer a question</option>
+          </Select>
+        </Field>
+
+        {watchMode === "question" && (
+          <Field
+            label="Analytical question"
+            htmlFor="analytical_question"
+            error={state.fieldErrors?.analytical_question}
+            hint="A yes/no or outcome question the reports should keep answering."
+            info="Each report assesses the consolidated findings against the interest frame and gives a current answer to this question, with a verdict that is tracked over time."
+          >
+            <Input
+              id="analytical_question"
+              name="analytical_question"
+              defaultValue={topic?.analytical_question ?? ""}
+              placeholder="e.g. Will UMNO leave the Unity Government (UG)?"
+              maxLength={300}
+            />
+          </Field>
+        )}
+
+        <Field
+          label="Interest frame"
+          htmlFor="factor_name_0"
+          error={state.fieldErrors?.interest_frame}
+          hint={`The factors that drive this topic, up to ${MAX_FACTORS}. Key question and indicators are optional but sharpen the search.`}
+          info="The analytical frame for this topic. Each factor names an angle to track; its key question says what the factor should answer, and its indicators are the observable evidence to watch. The tracker searches along these factors and tags findings with them."
+        >
+          <div className="space-y-3">
+            {factors.map((factor, index) => (
+              <div
+                key={index}
+                className="space-y-2 rounded-md border border-rule bg-neutral-50 p-3"
+              >
+                <div className="flex items-center gap-2">
+                  <Input
+                    id={`factor_name_${index}`}
+                    value={factor.name}
+                    onChange={(e) =>
+                      updateFactor(index, { name: e.target.value })
                     }
-                  }}
-                  placeholder={
-                    AREA_PLACEHOLDERS[index] ?? "Another angle to track"
+                    placeholder={
+                      FACTOR_PLACEHOLDERS[index] ?? "Another factor to track"
+                    }
+                    aria-label={`Factor ${index + 1} name`}
+                    className="font-medium"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeFactor(index)}
+                    disabled={factors.length === 1 && factor.name === ""}
+                    aria-label={`Remove factor ${index + 1}`}
+                    className="shrink-0 rounded-md p-2.5 text-ink-faint hover:bg-neutral-100 hover:text-ink disabled:opacity-40"
+                  >
+                    <X className="size-4" aria-hidden />
+                  </button>
+                </div>
+                <Input
+                  value={factor.key_question}
+                  onChange={(e) =>
+                    updateFactor(index, { key_question: e.target.value })
                   }
-                  aria-label={`Interest area ${index + 1}`}
+                  placeholder="Key question — e.g. Does UMNO gain more by staying or leaving?"
+                  aria-label={`Factor ${index + 1} key question`}
                 />
-                <button
-                  type="button"
-                  onClick={() => removeArea(index)}
-                  disabled={areas.length === 1 && area === ""}
-                  aria-label={`Remove interest area ${index + 1}`}
-                  className="shrink-0 rounded-md p-2.5 text-ink-faint hover:bg-neutral-100 hover:text-ink disabled:opacity-40"
-                >
-                  <X className="size-4" aria-hidden />
-                </button>
+                <Input
+                  value={factor.indicators}
+                  onChange={(e) =>
+                    updateFactor(index, { indicators: e.target.value })
+                  }
+                  placeholder="Indicators, comma-separated — e.g. polling trends, by-election performance"
+                  aria-label={`Factor ${index + 1} indicators`}
+                />
               </div>
             ))}
 
-            <div className="flex items-center justify-between">
-              <button
-                type="button"
-                onClick={addArea}
-                disabled={areas.length >= MAX_INTEREST_AREAS}
-                className="inline-flex min-h-9 items-center gap-1 rounded-md border border-rule px-3 text-sm font-medium hover:bg-neutral-100 disabled:opacity-40"
-              >
-                <Plus className="size-4" aria-hidden /> Add item
-              </button>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={addFactor}
+                  disabled={factors.length >= MAX_FACTORS}
+                  className="inline-flex min-h-9 items-center gap-1 rounded-md border border-rule px-3 text-sm font-medium hover:bg-neutral-100 disabled:opacity-40"
+                >
+                  <Plus className="size-4" aria-hidden /> Add factor
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => suggestFrame(e.currentTarget.form)}
+                  disabled={drafting}
+                  className="inline-flex min-h-9 items-center gap-1 rounded-md border border-rule px-3 text-sm font-medium hover:bg-neutral-100 disabled:opacity-40"
+                >
+                  {drafting ? (
+                    <Spinner />
+                  ) : (
+                    <Sparkles className="size-4" aria-hidden />
+                  )}
+                  Suggest frame
+                </button>
+              </div>
               <span
                 className={
-                  areas.length >= MAX_INTEREST_AREAS
+                  factors.length >= MAX_FACTORS
                     ? "text-xs font-medium text-amber-800"
                     : "text-xs text-ink-faint"
                 }
               >
-                {areas.length >= MAX_INTEREST_AREAS
-                  ? `Maximum of ${MAX_INTEREST_AREAS} items reached`
-                  : `${areas.length} of ${MAX_INTEREST_AREAS} items`}
+                {factors.length >= MAX_FACTORS
+                  ? `Maximum of ${MAX_FACTORS} factors reached`
+                  : `${factors.length} of ${MAX_FACTORS} factors`}
               </span>
             </div>
+            {draftError && (
+              <p role="alert" className="text-sm font-medium text-red-700">
+                {draftError}
+              </p>
+            )}
           </div>
         </Field>
+
+        <input type="hidden" name="interest_frame" value={frameJson} />
 
         <div className="grid grid-cols-2 gap-4">
           <Field

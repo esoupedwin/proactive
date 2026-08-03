@@ -10,8 +10,10 @@ import {
   updateDisplaySettings,
   updateProfilePreferences,
 } from "@/lib/actions";
+import { sumUsage } from "@/lib/ai/usage";
+import { formatTokens, formatUsdDetailed } from "@/lib/reports";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import type { Profile, Topic } from "@/lib/types";
+import type { Profile, Report, Topic } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -23,11 +25,22 @@ export default async function SettingsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: profile }, { data: topicRows }] = await Promise.all([
-    supabase.from("profiles").select("*").eq("id", user.id).maybeSingle<Profile>(),
-    supabase.from("topics").select("*").order("position").order("created_at"),
-  ]);
+  const [{ data: profile }, { data: topicRows }, { data: usageRows }] =
+    await Promise.all([
+      supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", user.id)
+        .maybeSingle<Profile>(),
+      supabase.from("topics").select("*").order("position").order("created_at"),
+      // RLS scopes this to the signed-in user; every report-attached LLM cost
+      // (pipeline, experts, expansions) lands in reports.usage.
+      supabase.from("reports").select("usage").not("usage", "is", null),
+    ]);
   const topics = (topicRows ?? []) as Topic[];
+  const spend = sumUsage(
+    ((usageRows ?? []) as Pick<Report, "usage">[]).map((row) => row.usage),
+  );
 
   return (
     <main className="px-5 pb-16 pt-6">
@@ -47,35 +60,60 @@ export default async function SettingsPage() {
       </header>
 
       {/* Profile */}
-      <section aria-label="Profile" className="mb-8 flex items-center gap-4">
-        {profile?.avatar_url ? (
-          <Image
-            src={profile.avatar_url}
-            alt=""
-            width={48}
-            height={48}
-            className="rounded-full border border-rule"
-          />
-        ) : (
-          <div
-            aria-hidden
-            className="flex size-12 items-center justify-center rounded-full border border-rule bg-neutral-100 text-lg font-bold text-ink-faint"
-          >
-            {(profile?.display_name ?? user.email ?? "?").charAt(0).toUpperCase()}
-          </div>
-        )}
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold">
-            {profile?.display_name ?? user.email}
-          </p>
-          <form action={signOut}>
-            <button
-              type="submit"
-              className="text-xs text-ink-faint underline hover:text-ink"
+      <section aria-label="Profile" className="mb-8">
+        <div className="flex items-center gap-4">
+          {profile?.avatar_url ? (
+            <Image
+              src={profile.avatar_url}
+              alt=""
+              width={48}
+              height={48}
+              className="rounded-full border border-rule"
+            />
+          ) : (
+            <div
+              aria-hidden
+              className="flex size-12 items-center justify-center rounded-full border border-rule bg-neutral-100 text-lg font-bold text-ink-faint"
             >
-              Sign out
-            </button>
-          </form>
+              {(profile?.display_name ?? user.email ?? "?")
+                .charAt(0)
+                .toUpperCase()}
+            </div>
+          )}
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold">
+              {profile?.display_name ?? user.email}
+            </p>
+            <form action={signOut}>
+              <button
+                type="submit"
+                className="text-xs text-ink-faint underline hover:text-ink"
+              >
+                Sign out
+              </button>
+            </form>
+          </div>
+        </div>
+
+        {/* Lifetime LLM spend, across every topic and every kind of run. */}
+        <div className="mt-4 rounded-md border border-rule px-4 py-3">
+          <div className="flex items-baseline justify-between gap-3">
+            <p className="text-sm font-medium">Total LLM cost so far</p>
+            <p className="font-mono text-xl font-semibold tabular-nums">
+              {formatUsdDetailed(spend.estimated_cost_usd)}
+            </p>
+          </div>
+          <p className="mt-1 text-xs leading-relaxed text-ink-faint">
+            {spend.runs === 0
+              ? "No updates generated yet."
+              : `${formatTokens(spend.input_tokens + spend.output_tokens)} tokens · ${spend.calls} model call${spend.calls === 1 ? "" : "s"} · ${spend.web_search_calls} web search${spend.web_search_calls === 1 ? "" : "es"} across ${spend.runs} update${spend.runs === 1 ? "" : "s"} in ${topics.length} topic${topics.length === 1 ? "" : "s"}.`}
+          </p>
+          {spend.unpriced_models.length > 0 && (
+            <p className="mt-1 text-xs leading-relaxed text-ink-faint">
+              Excludes {spend.unpriced_models.join(", ")} — no pricing
+              configured, so the real total is higher.
+            </p>
+          )}
         </div>
       </section>
 

@@ -1,14 +1,17 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Bot, ChevronLeft, Landmark } from "lucide-react";
+import { ArrowRight, Bot, ChevronLeft, Landmark } from "lucide-react";
 import { LinkPending } from "@/components/link-pending";
-import { Badge, Button, Field, Select, Textarea } from "@/components/ui";
+import { Markdown } from "@/components/markdown";
+import { MarkdownTextarea } from "@/components/markdown-textarea";
+import { SubmitButton } from "@/components/submit-button";
+import { Badge, Field, Input, Select } from "@/components/ui";
 import {
   addAnalystExpert,
   addMentorExpert,
   deleteExpert,
   toggleExpertStatus,
-  updateExpertFocus,
+  updateAnalystSettings,
   updateMentorSettings,
 } from "@/lib/actions";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -72,8 +75,9 @@ export default async function TopicExpertsPage({
         </Link>
         <h1 className="text-2xl font-bold tracking-tight">Experts</h1>
         <p className="mt-1 text-sm leading-relaxed text-ink-soft">
-          Experts read each generated report and add their own output below
-          it.
+          Experts read each new report and add their own section below the
+          briefing. An expert added mid-cycle can also review the current
+          report — the button is on the briefing page.
         </p>
       </header>
 
@@ -140,27 +144,46 @@ export default async function TopicExpertsPage({
                   ))}
                 </Select>
               </Field>
-              <Button type="submit" variant="outline">
+              <SubmitButton variant="outline" pendingLabel="Saving…">
                 Save teaching settings
-              </Button>
+              </SubmitButton>
             </form>
 
             <div className="flex flex-wrap gap-2 border-t border-rule pt-4">
               <form action={toggleExpertStatus.bind(null, mentor.id)}>
-                <Button type="submit" variant="outline">
+                <SubmitButton
+                  variant="outline"
+                  pendingLabel={
+                    mentor.status === "active" ? "Pausing…" : "Resuming…"
+                  }
+                >
                   {mentor.status === "active" ? "Pause Mentor" : "Resume Mentor"}
-                </Button>
+                </SubmitButton>
               </form>
               <form action={deleteExpert.bind(null, mentor.id)}>
-                <Button type="submit" variant="danger">
+                <SubmitButton
+                  variant="danger"
+                  pendingLabel="Removing…"
+                  confirm="Remove Mentor? What it remembers teaching you for this topic will be deleted too."
+                >
                   Remove Mentor
-                </Button>
+                </SubmitButton>
               </form>
             </div>
             <p className="text-xs text-ink-faint">
-              Removing Mentor also deletes what it remembers teaching you for
-              this topic.
+              {mentor.status === "active"
+                ? "Removing Mentor also deletes what it remembers teaching you for this topic."
+                : "While paused, Mentor skips new reports and its section is hidden from the briefing."}
             </p>
+            <Link
+              href={`/topics/${topicId}`}
+              className="inline-flex items-center gap-1 text-sm font-medium text-ink-soft hover:text-ink hover:underline"
+            >
+              See Mentor on the briefing{" "}
+              <LinkPending>
+                <ArrowRight className="size-3.5" aria-hidden />
+              </LinkPending>
+            </Link>
           </div>
         </section>
       ) : (
@@ -211,7 +234,14 @@ export default async function TopicExpertsPage({
                 ))}
               </Select>
             </Field>
-            <Button type="submit">Add Mentor to this topic</Button>
+            <SubmitButton pendingLabel="Adding Mentor…">
+              Add Mentor to this topic
+            </SubmitButton>
+            <p className="text-xs text-ink-faint">
+              Mentor reviews each new report automatically. To have it review
+              the current report right away, use the button under the briefing
+              after adding.
+            </p>
           </form>
         </section>
       )}
@@ -226,10 +256,10 @@ export default async function TopicExpertsPage({
               <Landmark className="size-5" />
             </span>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-bold">Analyst</p>
+              <p className="truncate text-sm font-bold">{analyst.name}</p>
               <p className="text-xs text-ink-faint">
-                Neutral, evidence-based analysis: what&apos;s happening, why it
-                matters, what may happen next. Tracks its own forward calls.
+                An independent read of each report through your chosen lens —
+                short commentary that refines or challenges the briefing.
               </p>
             </div>
             <Badge tone={analyst.status === "active" ? "active" : "paused"}>
@@ -239,43 +269,84 @@ export default async function TopicExpertsPage({
 
           <div className="space-y-4 px-4 py-4">
             <form
-              action={updateExpertFocus.bind(null, analyst.id)}
+              action={updateAnalystSettings.bind(null, analyst.id)}
               className="space-y-3"
             >
               <Field
-                label="Specialization"
-                htmlFor="focus"
-                hint="What the analyst focuses on. Leave empty to analyze the topic broadly."
+                label="Name"
+                htmlFor="analyst_name"
+                hint="What this analyst is called on the briefing. Leave empty for “Analyst”."
               >
-                <Textarea
-                  id="focus"
-                  name="focus"
-                  rows={3}
-                  defaultValue={analyst.config.focus ?? ""}
-                  placeholder="e.g. Malaysia's domestic politics, governance, power dynamics, and society"
+                <Input
+                  id="analyst_name"
+                  name="name"
+                  maxLength={60}
+                  defaultValue={analyst.name}
+                  placeholder="e.g. Prof. James Chin"
                 />
               </Field>
-              <Button type="submit" variant="outline">
-                Save specialization
-              </Button>
+              <Field
+                label="Specialization"
+                htmlFor="focus"
+                hint="What the analyst focuses on. Markdown works — headings, bullet lists and **bold** are passed through and followed, and pasting formatted text converts it to Markdown. Leave empty to analyze the topic broadly."
+              >
+                <MarkdownTextarea
+                  id="focus"
+                  name="focus"
+                  rows={10}
+                  defaultValue={analyst.config.focus ?? ""}
+                  placeholder={"e.g. Malaysia's domestic politics, governance, power dynamics, and society\n\n## Use language such as\n- increases bargaining leverage\n- alters incentive structure"}
+                />
+              </Field>
+              <SubmitButton variant="outline" pendingLabel="Saving…">
+                Save analyst
+              </SubmitButton>
+              {analyst.config.focus?.trim() && (
+                <div className="rounded-md border border-rule bg-neutral-50 px-4 py-3">
+                  <p className="mb-2 text-xs uppercase tracking-wide text-ink-faint">
+                    Saved specialization, as the analyst reads it
+                  </p>
+                  <Markdown text={analyst.config.focus} />
+                </div>
+              )}
             </form>
 
             <div className="flex flex-wrap gap-2 border-t border-rule pt-4">
               <form action={toggleExpertStatus.bind(null, analyst.id)}>
-                <Button type="submit" variant="outline">
-                  {analyst.status === "active" ? "Pause Analyst" : "Resume Analyst"}
-                </Button>
+                <SubmitButton
+                  variant="outline"
+                  pendingLabel={
+                    analyst.status === "active" ? "Pausing…" : "Resuming…"
+                  }
+                >
+                  {analyst.status === "active" ? "Pause" : "Resume"}{" "}
+                  {analyst.name}
+                </SubmitButton>
               </form>
               <form action={deleteExpert.bind(null, analyst.id)}>
-                <Button type="submit" variant="danger">
-                  Remove Analyst
-                </Button>
+                <SubmitButton
+                  variant="danger"
+                  pendingLabel="Removing…"
+                  confirm={`Remove ${analyst.name}? Its commentary on this topic's reports will be deleted too.`}
+                >
+                  Remove {analyst.name}
+                </SubmitButton>
               </form>
             </div>
             <p className="text-xs text-ink-faint">
-              Removing Analyst also deletes its tracked scenarios for this
-              topic.
+              {analyst.status === "active"
+                ? `Removing ${analyst.name} also deletes its commentary on this topic's reports.`
+                : `While paused, ${analyst.name} skips new reports and its section is hidden from the briefing.`}
             </p>
+            <Link
+              href={`/topics/${topicId}`}
+              className="inline-flex items-center gap-1 text-sm font-medium text-ink-soft hover:text-ink hover:underline"
+            >
+              See {analyst.name} on the briefing{" "}
+              <LinkPending>
+                <ArrowRight className="size-3.5" aria-hidden />
+              </LinkPending>
+            </Link>
           </div>
         </section>
       ) : (
@@ -293,33 +364,53 @@ export default async function TopicExpertsPage({
             <div>
               <p className="text-sm font-bold">Analyst</p>
               <p className="text-xs text-ink-faint">
-                Neutral, evidence-based analysis of each report: what&apos;s
-                happening, why it matters, what may happen next — with forward
-                scenarios it revisits over time.
+                An independent commentator on each report. Give it a
+                specialization and it reads the briefing through that lens,
+                adding what the report itself did not say.
               </p>
             </div>
           </div>
           <form action={boundAddAnalyst} className="space-y-3 px-4 py-4">
             <Field
+              label="Name"
+              htmlFor="add_analyst_name"
+              hint="Optional — defaults to “Analyst”. You can change this anytime."
+            >
+              <Input
+                id="add_analyst_name"
+                name="name"
+                maxLength={60}
+                placeholder="e.g. Prof. James Chin"
+              />
+            </Field>
+            <Field
               label="Specialization"
               htmlFor="analyst_focus"
-              hint="Optional — defaults to the topic itself. You can change this anytime."
+              hint="Optional — defaults to the topic itself. Markdown works, and you can change this anytime."
             >
-              <Textarea
+              <MarkdownTextarea
                 id="analyst_focus"
                 name="focus"
-                rows={3}
+                rows={4}
                 placeholder="e.g. Malaysia's domestic politics, governance, power dynamics, and society"
               />
             </Field>
-            <Button type="submit">Add Analyst to this topic</Button>
+            <SubmitButton pendingLabel="Adding Analyst…">
+              Add Analyst to this topic
+            </SubmitButton>
+            <p className="text-xs text-ink-faint">
+              The Analyst reviews each new report automatically. To have it
+              review the current report right away, use the button under the
+              briefing after adding.
+            </p>
           </form>
         </section>
       )}
 
       <p className="mt-6 text-xs leading-relaxed text-ink-faint">
-        Experts read each generated report and contribute their own section
-        below it. More kinds are coming.
+        Each expert run is a separate model call — its token cost is shown
+        under the expert&apos;s section on the briefing. More expert kinds are
+        coming.
       </p>
     </main>
   );

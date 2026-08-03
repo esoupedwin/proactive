@@ -106,6 +106,7 @@ export default async function TopicExtractsPage({
                 {extract.corroborations > 0 && (
                   <Badge>×{extract.corroborations + 1} sources</Badge>
                 )}
+                {extract.factor && <Badge>{extract.factor}</Badge>}
                 <span className="text-xs text-ink-faint">
                   Collected {formatDateTime(extract.created_at)}
                 </span>

@@ -39,9 +39,13 @@ export const RecordExtractParamsSchema = z.object({
   gist: z
     .string()
     .describe("1-2 sentence factual gist of the development or discussion"),
+  factor: z
+    .string()
+    .nullable()
+    .describe("EXACT name of the interest-frame factor this belongs to; null when it fits none"),
   relevance: z
     .string()
-    .describe("Why this matters for the user's topic and interest areas"),
+    .describe("Why this matters for the user's topic and interest frame"),
   novelty: z
     .enum(["new", "update"])
     .describe("new = first time recorded; update = meaningful development of something already recorded"),
@@ -119,6 +123,59 @@ export const CitedBulletSchema = z.object({
     .describe("Ids of the extracts that support this bullet"),
 });
 export type CitedBullet = z.infer<typeof CitedBulletSchema>;
+
+// Question mode: the Reporter answers the topic's analytical question by
+// synthesizing the consolidated extracts against the interest frame.
+
+export const QuestionVerdictSchema = z.object({
+  answer: z
+    .string()
+    .describe("One-sentence current answer to the analytical question"),
+  likelihood: z
+    .enum(["likely", "possible", "unlikely"])
+    .describe("How likely the questioned outcome currently is"),
+  confidence: z
+    .enum(["low", "medium", "high"])
+    .describe("How strongly the evidence supports this verdict"),
+  trend: z
+    .enum(["baseline", "strengthened", "weakened", "reversed", "unchanged"])
+    .describe(
+      "baseline = first assessment; otherwise how this verdict moved vs the previous report's verdict",
+    ),
+  rationale: z
+    .array(CitedBulletSchema)
+    .describe("The strongest drivers behind the verdict, each cited, most decisive first"),
+});
+
+export const FactorAssessmentDraftSchema = z.object({
+  factor: z.string().describe("EXACT interest-frame factor name"),
+  bullets: z
+    .array(CitedBulletSchema)
+    .describe("What the evidence says for this factor's key question, cited"),
+});
+
+export const QuestionReporterFinalSchema = z.object({
+  verdict: QuestionVerdictSchema,
+  factor_assessments: z
+    .array(FactorAssessmentDraftSchema)
+    .describe("One entry per interest-frame factor with meaningful evidence"),
+  what_changed: z
+    .array(CitedBulletSchema)
+    .describe("What moved since the previous assessment; may cite nothing when purely narrative"),
+  no_meaningful_change: z
+    .boolean()
+    .describe("True if nothing genuinely new bears on the question since the previous report"),
+  summary: z.string().describe("One sentence summary of this assessment for the history list"),
+  cover_extract_id: z
+    .string()
+    .nullable()
+    .describe("Id of the ONE extract whose page imagery best represents this assessment's central evidence; null when none is central enough"),
+  key_subtopics: z
+    .array(z.string())
+    .max(10)
+    .describe("The currently-active subtopics of this topic, most active first"),
+});
+export type QuestionReporterFinal = z.infer<typeof QuestionReporterFinalSchema>;
 
 export const ReporterFinalSchema = z.object({
   latest_developments: z.array(CitedBulletSchema),

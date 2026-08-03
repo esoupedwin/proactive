@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { composeReport } from "@/lib/agents/reporter/compose";
-import type { ReporterFinal } from "@/lib/agents/schemas";
+import {
+  composeQuestionReport,
+  composeReport,
+} from "@/lib/agents/reporter/compose";
+import type { QuestionReporterFinal, ReporterFinal } from "@/lib/agents/schemas";
 import type { ExtractRecord } from "@/lib/types";
 
 function extract(id: string, title = `Title ${id}`): ExtractRecord {
@@ -14,6 +17,7 @@ function extract(id: string, title = `Title ${id}`): ExtractRecord {
     url: `https://example.com/${id}`,
     canonical_url: `example.com/${id}`,
     published_at: "2026-08-01",
+    factor: null,
     gist: `Gist ${id}`,
     relevance: null,
     novelty: "new",
@@ -132,5 +136,89 @@ describe("composeReport", () => {
       result.sections.latest_developments[0]!.text.match(/\*\*[^*]+\*\*/g) ??
       [];
     expect(marks).toHaveLength(2);
+  });
+});
+
+function questionFinal(
+  overrides: Partial<QuestionReporterFinal> = {},
+): QuestionReporterFinal {
+  return {
+    verdict: {
+      answer: "Unlikely to happen this year.",
+      likelihood: "unlikely",
+      confidence: "medium",
+      trend: "baseline",
+      rationale: [{ text: "driver", extract_ids: ["a"] }],
+    },
+    factor_assessments: [
+      { factor: "Political Incentives", bullets: [{ text: "f1", extract_ids: ["b"] }] },
+    ],
+    what_changed: [],
+    no_meaningful_change: false,
+    summary: "sum",
+    cover_extract_id: null,
+    key_subtopics: [],
+    ...overrides,
+  };
+}
+
+describe("composeQuestionReport", () => {
+  it("builds verdict + factor sections with positional refs and empty briefing sections", () => {
+    const result = composeQuestionReport(questionFinal(), byId(["a", "b"]));
+
+    expect(result.snapshot.map((e) => e.id)).toEqual(["a", "b"]);
+    expect(result.sections.verdict!.rationale[0]!.source_refs).toEqual([0]);
+    expect(result.sections.factor_assessments![0]!.bullets[0]!.source_refs).toEqual([1]);
+    expect(result.sections.verdict!.likelihood).toBe("unlikely");
+    expect(result.sections.verdict!.trend).toBe("baseline");
+    // Question reports carry no briefing sections.
+    expect(result.sections.latest_developments).toHaveLength(0);
+    expect(result.sections.cross_source_takeaway).toHaveLength(0);
+  });
+
+  it("drops hallucinated citations and factors left without evidence", () => {
+    const result = composeQuestionReport(
+      questionFinal({
+        factor_assessments: [
+          { factor: "Ghost Factor", bullets: [{ text: "x", extract_ids: ["ghost"] }] },
+          { factor: "Real Factor", bullets: [{ text: "y", extract_ids: ["b"] }] },
+        ],
+      }),
+      byId(["a", "b"]),
+    );
+
+    expect(result.sections.factor_assessments!.map((f) => f.factor)).toEqual([
+      "Real Factor",
+    ]);
+  });
+
+  it("keeps uncited bullets only when there are no sources at all (empty baseline)", () => {
+    const result = composeQuestionReport(
+      questionFinal({
+        verdict: {
+          answer: "Too early to say.",
+          likelihood: "possible",
+          confidence: "low",
+          trend: "baseline",
+          rationale: [{ text: "no evidence yet", extract_ids: [] }],
+        },
+        factor_assessments: [],
+      }),
+      byId([]),
+    );
+    expect(result.snapshot).toHaveLength(0);
+    expect(result.sections.verdict!.rationale).toHaveLength(1);
+  });
+
+  it("maps the cover nominee and keeps what_changed narrative bullets", () => {
+    const result = composeQuestionReport(
+      questionFinal({
+        cover_extract_id: "b",
+        what_changed: [{ text: "narrative", extract_ids: [] }],
+      }),
+      byId(["a", "b"]),
+    );
+    expect(result.coverRef).toBe(1);
+    expect(result.sections.what_changed).toHaveLength(1);
   });
 });

@@ -5,7 +5,14 @@ import {
   parseMarkedText,
 } from "@/lib/entities";
 import { takeawayPoints } from "@/lib/reports";
-import type { ReportBullet, ReportSections, Source } from "@/lib/types";
+import type {
+  QuestionVerdict,
+  ReportBullet,
+  ReportSections,
+  ScenarioLikelihood,
+  Source,
+  VerdictTrend,
+} from "@/lib/types";
 import { HeroImage } from "./hero-image";
 
 /**
@@ -37,14 +44,29 @@ export function ReportView({
   sections,
   sources,
   fallbackEntities = [],
+  question,
 }: {
   sections: ReportSections;
   sources: Source[];
   /** Key entities from topic memory, used only when the report has no inline markers. */
   fallbackEntities?: string[];
+  /** The topic's analytical question — shown above question-mode verdicts. */
+  question?: string | null;
 }) {
   // If the reporter marked entities itself, trust its judgment everywhere.
   const entities = hasEntityMarkers(sections) ? [] : fallbackEntities;
+  // Question-mode reports render as an assessment, not a briefing.
+  if (sections.verdict) {
+    return (
+      <QuestionReportView
+        sections={sections}
+        verdict={sections.verdict}
+        sources={sources}
+        entities={entities}
+        question={question}
+      />
+    );
+  }
   if (sections.no_meaningful_change) {
     return (
       <div className="space-y-6">
@@ -119,6 +141,132 @@ export function ReportView({
         sources={sources}
         entities={entities}
       />
+      <Section
+        title="What Changed"
+        bullets={sections.what_changed}
+        sources={sources}
+        entities={entities}
+      />
+    </div>
+  );
+}
+
+const LIKELIHOOD_LABEL: Record<ScenarioLikelihood, string> = {
+  likely: "Likely",
+  possible: "Possible",
+  unlikely: "Unlikely",
+};
+
+const TREND_LABEL: Record<VerdictTrend, string> = {
+  baseline: "Baseline assessment",
+  strengthened: "Strengthened",
+  weakened: "Weakened",
+  reversed: "Reversed",
+  unchanged: "Unchanged",
+};
+
+const TREND_CLASS: Record<VerdictTrend, string> = {
+  baseline: "border-rule text-ink-soft",
+  strengthened: "border-emerald-300 bg-emerald-50 text-emerald-900",
+  weakened: "border-amber-300 bg-amber-50 text-amber-900",
+  reversed: "border-red-300 bg-red-50 text-red-900",
+  unchanged: "border-rule text-ink-soft",
+};
+
+/** Question-mode layout: verdict, per-factor assessments, what changed. */
+function QuestionReportView({
+  sections,
+  verdict,
+  sources,
+  entities,
+  question,
+}: {
+  sections: ReportSections;
+  verdict: QuestionVerdict;
+  sources: Source[];
+  entities: string[];
+  question?: string | null;
+}) {
+  const hero = sections.hero_image;
+  const heroSource =
+    hero && hero.source_ref >= 0 && hero.source_ref < sources.length
+      ? sources[hero.source_ref]!
+      : null;
+
+  return (
+    <div className="space-y-7">
+      {sections.no_meaningful_change && (
+        <p className="rounded-md border border-rule bg-neutral-50 px-4 py-3 text-sm leading-relaxed text-ink-soft">
+          Nothing new bears on this question since the previous update — the
+          assessment below stands.
+        </p>
+      )}
+
+      {hero && !sections.no_meaningful_change && (
+        <HeroImage
+          url={hero.url}
+          alt={hero.alt}
+          description={
+            hero.description ??
+            (heroSource ? `From “${heroSource.title}”` : null)
+          }
+          credit={heroSource ? (heroSource.publisher ?? heroSource.title) : null}
+          creditUrl={heroSource?.url ?? null}
+        />
+      )}
+
+      <section
+        aria-label="Assessment"
+        className="rounded-md border border-rule bg-neutral-50 px-4 py-4"
+      >
+        {question && (
+          <p className="text-sm font-semibold uppercase tracking-wide text-ink-faint">
+            {question}
+          </p>
+        )}
+        <p className="mt-2 text-lg font-semibold leading-snug">
+          <RichText text={verdict.answer} entities={entities} />
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-medium">
+          <span className="rounded-full border border-rule px-2.5 py-0.5">
+            {LIKELIHOOD_LABEL[verdict.likelihood]}
+          </span>
+          <span className="rounded-full border border-rule px-2.5 py-0.5">
+            {verdict.confidence} confidence
+          </span>
+          <span
+            className={`rounded-full border px-2.5 py-0.5 ${TREND_CLASS[verdict.trend]}`}
+          >
+            {TREND_LABEL[verdict.trend]}
+          </span>
+        </div>
+        {verdict.rationale.length > 0 && (
+          <ul className="mt-4 space-y-2.5">
+            {verdict.rationale.map((bullet, i) => (
+              <li key={i} className="flex gap-2 text-[15px] leading-relaxed">
+                <span aria-hidden className="select-none text-ink-faint">
+                  •
+                </span>
+                <span>
+                  <RichText text={bullet.text} entities={entities} />
+                  <SourceRefs refs={bullet.source_refs} sources={sources} />
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {(sections.factor_assessments ?? []).map((fa) => (
+        <Section
+          key={fa.factor}
+          title={fa.factor}
+          bullets={fa.bullets}
+          sources={sources}
+          entities={entities}
+        />
+      ))}
+
       <Section
         title="What Changed"
         bullets={sections.what_changed}

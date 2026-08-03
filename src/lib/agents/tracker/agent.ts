@@ -2,6 +2,7 @@ import { Agent, tool, webSearchTool } from "@openai/agents";
 import { freshnessDays } from "../../reports";
 import type { Topic } from "../../types";
 import type { TraceCollector } from "../../ai/trace";
+import { renderAnalyticalQuestion, renderInterestFrame } from "../frame";
 import {
   CorroborateExtractParamsSchema,
   ExaSearchParamsSchema,
@@ -34,18 +35,25 @@ export function trackerInstructions(
     "",
     `Topic: ${topic.title}`,
     `Goal: ${topic.description}`,
-    `Interest areas: ${topic.interest_areas.join(", ")}`,
+    ...renderAnalyticalQuestion(topic),
+    ...renderInterestFrame(topic.interest_frame),
     recentSubtopics.length > 0
       ? `Recently active subtopics (from your previous runs): ${recentSubtopics.join(", ")}`
       : "This may be your first run for this topic — establish the key subtopics.",
     "",
     "How to work:",
     `- Focus on developments from roughly the last ${windowDays} day(s); older material only when it is a major development you have not recorded yet.`,
-    "- Plan 2-4 angles: main news, the recently active subtopics, plus at least one exploratory angle for emerging developments.",
+    "- Plan 2-4 angles from the interest frame: pick the factors that are most active or least recently covered, use their key questions to aim the searches and their indicators as search terms, and keep at least one exploratory angle for developments outside the frame.",
+    ...(topic.watch_mode === "question"
+      ? [
+          "- Prioritise evidence that bears on the analytical question — findings that make its answer more or less likely.",
+        ]
+      : []),
     "- Use web search for factual news coverage. Use exa_search for semantic discovery — community discussion (Reddit), practitioner writing (Medium/blogs), and analysis that keyword search misses.",
     "- BEFORE recording, call search_existing_extracts to check whether the story is already in the store. If it is: skip it, or call corroborate_extract when a different outlet reports the same story, or record with novelty 'update' when there is a genuine new development.",
     "- Record one extract per distinct development or discussion via record_extract. Set source_type by where it lives: news site → news, reddit.com → reddit, medium.com or practitioner blogs → medium.",
-    "- The gist must be factual and specific (numbers, names, dates). The relevance field says why it matters for THIS topic and the user's interest areas.",
+    "- Tag each extract with the interest-frame factor it belongs to (the factor field, EXACT factor name). Use null only when a find genuinely fits no factor — do not force a fit.",
+    "- The gist must be factual and specific (numbers, names, dates). The relevance field says why it matters for THIS topic and its interest frame.",
     "- Never invent URLs, dates, or claims. Only record what a source actually says.",
     "- Budget: at most 2 web searches and 3 exa searches per run. Record at most 10 extracts — prefer the most significant.",
     "",

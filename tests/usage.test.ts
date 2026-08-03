@@ -5,7 +5,9 @@ import {
   diffUsage,
   estimateCallCostUsd,
   estimateCostUsd,
+  estimatePartialCostUsd,
   pricingFor,
+  sumUsage,
 } from "@/lib/ai/usage";
 import {
   formatTokens,
@@ -138,6 +140,80 @@ describe("diffUsage / addUsage", () => {
       (1_500 / 1e6) * 0.25 + (300 / 1e6) * 2 + 0.01,
       3,
     );
+  });
+});
+
+describe("estimatePartialCostUsd", () => {
+  it("prices what it can and names what it could not", () => {
+    const { cost, unpricedModels } = estimatePartialCostUsd(
+      {
+        "gpt-5": { calls: 1, input_tokens: 1_000_000, output_tokens: 100_000 },
+        "mystery-model": { calls: 1, input_tokens: 10_000, output_tokens: 1_000 },
+      },
+      10,
+    );
+    // Unlike estimateCostUsd, the known portion survives.
+    expect(cost).toBeCloseTo(2.35, 4);
+    expect(unpricedModels).toEqual(["mystery-model"]);
+  });
+});
+
+describe("sumUsage", () => {
+  const record = (
+    model: string,
+    input: number,
+    output: number,
+    searches = 0,
+  ) => ({
+    calls: 1,
+    input_tokens: input,
+    output_tokens: output,
+    web_search_calls: searches,
+    by_model: { [model]: { calls: 1, input_tokens: input, output_tokens: output } },
+    estimated_cost_usd: 0,
+  });
+
+  it("totals every record and reprices from the merged per-model tokens", () => {
+    const total = sumUsage([
+      record("gpt-5-mini", 1_000_000, 100_000, 2),
+      record("gpt-5-mini", 1_000_000, 100_000),
+      record("gpt-5", 1_000_000, 100_000, 1),
+    ]);
+
+    expect(total.runs).toBe(3);
+    expect(total.calls).toBe(3);
+    expect(total.input_tokens).toBe(3_000_000);
+    expect(total.output_tokens).toBe(300_000);
+    expect(total.web_search_calls).toBe(3);
+    expect(total.by_model["gpt-5-mini"]).toEqual({
+      calls: 2,
+      input_tokens: 2_000_000,
+      output_tokens: 200_000,
+    });
+    // 2M in @ $0.25 + 200k out @ $2 + 1M in @ $1.25 + 100k out @ $10 + 3 searches
+    expect(total.estimated_cost_usd).toBeCloseTo(
+      0.5 + 0.4 + 1.25 + 1.0 + 0.03,
+      4,
+    );
+    expect(total.unpriced_models).toEqual([]);
+  });
+
+  it("skips nulls and returns a zeroed total when there is nothing to count", () => {
+    const total = sumUsage([null, undefined]);
+    expect(total.runs).toBe(0);
+    expect(total.calls).toBe(0);
+    expect(total.estimated_cost_usd).toBe(0);
+    expect(total.by_model).toEqual({});
+  });
+
+  it("keeps the priced portion when one model has no price", () => {
+    const total = sumUsage([
+      record("gpt-5", 1_000_000, 0),
+      record("mystery-model", 500_000, 1_000),
+    ]);
+    expect(total.input_tokens).toBe(1_500_000);
+    expect(total.estimated_cost_usd).toBeCloseTo(1.25, 4);
+    expect(total.unpriced_models).toEqual(["mystery-model"]);
   });
 });
 

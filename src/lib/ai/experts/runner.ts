@@ -1,6 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
-  AnalystMemoryData,
   Expert,
   ExpertMemoryData,
   ExpertOutput,
@@ -48,7 +47,8 @@ export async function runExpertOnReport(options: {
     .maybeSingle<{ memory: ExpertMemoryData }>();
 
   let output: ExpertOutputData;
-  let newMemory: ExpertMemoryData;
+  // Only experts that remember something across runs set this.
+  let newMemory: ExpertMemoryData | undefined;
   const usageBefore = usage?.snapshot();
 
   switch (expert.kind) {
@@ -70,9 +70,6 @@ export async function runExpertOnReport(options: {
     }
 
     case "analyst": {
-      const memory: AnalystMemoryData = {
-        scenarios: memoryRow?.memory?.scenarios ?? [],
-      };
       // The analyst also sees the report's sources so it can weigh
       // reported fact vs community sentiment vs interpretation.
       const { data: sourceRows } = await supabase
@@ -92,11 +89,10 @@ export async function runExpertOnReport(options: {
         report.sections,
         expert.config.focus?.trim() ||
           `${topic.title} — ${topic.description}`,
-        memory,
         extracts,
       );
       output = { analysis: result.analysis };
-      newMemory = result.memory;
+      // The analyst writes standalone commentary — it carries no memory.
       break;
     }
 
@@ -126,12 +122,14 @@ export async function runExpertOnReport(options: {
     .single<ExpertOutput>();
   if (error) throw new Error(`saving expert output failed: ${error.message}`);
 
-  await supabase.from("expert_memory").upsert({
-    expert_id: expert.id,
-    user_id: expert.user_id,
-    memory: newMemory,
-    updated_at: new Date().toISOString(),
-  });
+  if (newMemory) {
+    await supabase.from("expert_memory").upsert({
+      expert_id: expert.id,
+      user_id: expert.user_id,
+      memory: newMemory,
+      updated_at: new Date().toISOString(),
+    });
+  }
 
   return outputRow;
 }

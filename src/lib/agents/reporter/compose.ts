@@ -1,6 +1,11 @@
 import { capEntityMarkers } from "../../entities";
-import type { ExtractRecord, ReportSections } from "../../types";
-import type { CitedBullet, ReportDraft, ReporterFinal } from "../schemas";
+import type { ExtractRecord, ReportBullet, ReportSections } from "../../types";
+import type {
+  CitedBullet,
+  QuestionReporterFinal,
+  ReportDraft,
+  ReporterFinal,
+} from "../schemas";
 
 /**
  * Deterministic conversion from the Reporter agent's output (extract-id
@@ -123,5 +128,74 @@ export function composeReport(
     summary: clean.summary,
     snapshot,
     coverRef: clean.cover_source_ref,
+  };
+}
+
+/**
+ * Question-mode counterpart of composeReport: verdict + per-factor
+ * assessments instead of the briefing sections. Same citation contract —
+ * cited extracts become the ordered sources snapshot.
+ */
+export function composeQuestionReport(
+  final: QuestionReporterFinal,
+  extractsById: Map<string, ExtractRecord>,
+): ComposedReport {
+  const order: string[] = [];
+  const seen = new Set<string>();
+  const note = (id: string) => {
+    if (!seen.has(id) && extractsById.has(id)) {
+      seen.add(id);
+      order.push(id);
+    }
+  };
+  const noteBullets = (bullets: CitedBullet[]) =>
+    bullets.forEach((b) => b.extract_ids.forEach(note));
+  noteBullets(final.verdict.rationale);
+  final.factor_assessments.forEach((fa) => noteBullets(fa.bullets));
+  noteBullets(final.what_changed);
+  if (final.cover_extract_id) note(final.cover_extract_id);
+
+  const indexOf = new Map(order.map((id, i) => [id, i]));
+  const sourceCount = order.length;
+  const toBullet = (b: CitedBullet): ReportBullet => ({
+    text: capEntityMarkers(b.text, 2),
+    source_refs: b.extract_ids
+      .filter((id) => indexOf.has(id))
+      .map((id) => indexOf.get(id)!),
+  });
+  // Evidence bullets need a surviving citation (anti-hallucination guard),
+  // unless there are no sources at all (e.g. a baseline with an empty store).
+  const evidenceBullets = (bullets: CitedBullet[]) =>
+    bullets
+      .map(toBullet)
+      .filter((b) => b.source_refs.length > 0 || sourceCount === 0);
+
+  const coverRef =
+    final.cover_extract_id !== null
+      ? (indexOf.get(final.cover_extract_id) ?? null)
+      : null;
+
+  return {
+    sections: {
+      latest_developments: [],
+      community_reaction: [],
+      practitioner_view: [],
+      cross_source_takeaway: [],
+      what_changed: final.what_changed.map(toBullet),
+      no_meaningful_change: final.no_meaningful_change,
+      verdict: {
+        answer: capEntityMarkers(final.verdict.answer, 2),
+        likelihood: final.verdict.likelihood,
+        confidence: final.verdict.confidence,
+        trend: final.verdict.trend,
+        rationale: evidenceBullets(final.verdict.rationale),
+      },
+      factor_assessments: final.factor_assessments
+        .map((fa) => ({ factor: fa.factor, bullets: evidenceBullets(fa.bullets) }))
+        .filter((fa) => fa.bullets.length > 0),
+    },
+    summary: final.summary,
+    snapshot: order.map((id) => extractsById.get(id)!),
+    coverRef,
   };
 }

@@ -1,5 +1,6 @@
 import type {
   DetailLevel,
+  InterestFactor,
   ReportSections,
   SourceType,
   TopicMemory,
@@ -34,7 +35,7 @@ export interface SeedReport {
 export interface SeedTopic {
   title: string;
   description: string;
-  interest_areas: string[];
+  interest_frame: InterestFactor[];
   detail_level: DetailLevel;
   frequency: UpdateFrequency;
   reports: SeedReport[];
@@ -54,12 +55,32 @@ export const SEED_TOPICS: SeedTopic[] = [
     title: "Latest top LLMs",
     description:
       "I want to understand where the frontier LLM landscape is heading and what the emerging consensus is across different information sources.",
-    interest_areas: [
-      "Top models for reasoning",
-      "Top models for coding",
-      "Efficiency and cost",
-      "Agentic capabilities",
-      "Rumors about upcoming models",
+    interest_frame: [
+      {
+        name: "Top models for reasoning",
+        key_question: "Which models lead on reasoning, and is the lead stable?",
+        indicators: ["benchmark results", "eval leaderboards", "user reports"],
+      },
+      {
+        name: "Top models for coding",
+        key_question: "Which models do developers actually prefer for coding?",
+        indicators: ["coding benchmarks", "agentic coding tools", "dev sentiment"],
+      },
+      {
+        name: "Efficiency and cost",
+        key_question: "How fast is capability-per-dollar improving?",
+        indicators: ["API price changes", "small-model releases", "token costs"],
+      },
+      {
+        name: "Agentic capabilities",
+        key_question: "How quickly are models improving at long-horizon agent work?",
+        indicators: ["agent benchmarks", "tool-use features", "computer use"],
+      },
+      {
+        name: "Rumors about upcoming models",
+        key_question: "What is credibly known about unreleased frontier models?",
+        indicators: ["leaks", "vendor hints", "training-run reports"],
+      },
     ],
     detail_level: "standard",
     frequency: "daily",
@@ -307,12 +328,32 @@ export const SEED_TOPICS: SeedTopic[] = [
     title: "US–Iran Conflict",
     description:
       "I want to understand the latest military, diplomatic, political, and economic developments in the US–Iran conflict and how expert and public interpretations are changing.",
-    interest_areas: [
-      "Military developments",
-      "Diplomatic negotiations",
-      "Regional actors",
-      "Energy and maritime security",
-      "Escalation risks",
+    interest_frame: [
+      {
+        name: "Military developments",
+        key_question: "Is military activity expanding or winding down?",
+        indicators: ["strikes", "force deployments", "casualty reports"],
+      },
+      {
+        name: "Diplomatic negotiations",
+        key_question: "Are the parties moving toward or away from talks?",
+        indicators: ["back-channel reports", "mediator statements", "preconditions"],
+      },
+      {
+        name: "Regional actors",
+        key_question: "How are neighbours and proxies shifting their positions?",
+        indicators: ["proxy activity", "alliance statements", "border incidents"],
+      },
+      {
+        name: "Energy and maritime security",
+        key_question: "Is the conflict disrupting energy flows or shipping?",
+        indicators: ["oil prices", "Strait of Hormuz traffic", "insurance rates"],
+      },
+      {
+        name: "Escalation risks",
+        key_question: "What events could fundamentally change the trajectory?",
+        indicators: ["red-line rhetoric", "third-party entry", "domestic pressure"],
+      },
     ],
     detail_level: "standard",
     frequency: "daily",
@@ -438,12 +479,32 @@ export const SEED_TOPICS: SeedTopic[] = [
     title: "Product Management and AI",
     description:
       "I want to understand how AI is changing product management practices, product discovery, delivery, analytics, and team operating models.",
-    interest_areas: [
-      "AI product discovery",
-      "AI-assisted product management",
-      "Agentic workflows",
-      "Product analytics",
-      "Emerging operating models",
+    interest_frame: [
+      {
+        name: "AI product discovery",
+        key_question: "How is AI changing how teams find what to build?",
+        indicators: ["research tooling", "synthetic users", "case studies"],
+      },
+      {
+        name: "AI-assisted product management",
+        key_question: "Which PM tasks are being automated, and how well?",
+        indicators: ["PM copilots", "spec generation", "practitioner reviews"],
+      },
+      {
+        name: "Agentic workflows",
+        key_question: "Where are agent workflows delivering real product value?",
+        indicators: ["agent launches", "workflow tooling", "failure stories"],
+      },
+      {
+        name: "Product analytics",
+        key_question: "How is AI changing product measurement and insight?",
+        indicators: ["analytics features", "auto-insights", "adoption data"],
+      },
+      {
+        name: "Emerging operating models",
+        key_question: "How are AI-native teams organising differently?",
+        indicators: ["org changes", "role definitions", "hiring patterns"],
+      },
     ],
     detail_level: "standard",
     frequency: "weekly",

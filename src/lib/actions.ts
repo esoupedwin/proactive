@@ -4,14 +4,17 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { normalizeUrl } from "./ai/dedupe";
+import { generateInterestFrame } from "./ai/interest-frame";
 import { generateNewsQuery } from "./ai/news-query";
 import { openAiLlm } from "./ai/openai";
 import { SEED_TOPICS } from "./seed-data";
 import { createSupabaseServerClient } from "./supabase/server";
+import { frameFactorNames } from "./types";
 import type {
   DetailLevel,
   Expert,
   FeedbackRating,
+  InterestFactor,
   MentorFocus,
   MentorLevel,
   MentorMemoryData,
@@ -22,39 +25,85 @@ import type {
 // Validation
 // ---------------------------------------------------------------------------
 
-const topicInputSchema = z.object({
-  title: z
+const interestFactorSchema = z.object({
+  name: z
     .string()
     .trim()
-    .min(1, "Give your topic a short title.")
-    .max(120, "Keep the title under 120 characters."),
-  description: z
-    .string()
-    .trim()
-    .min(10, "Describe what you want to understand (at least 10 characters)."),
-  interest_areas: z
+    .min(1, "Every factor needs a name.")
+    .max(80, "Keep factor names under 80 characters."),
+  key_question: z.string().trim().max(300).catch(""),
+  indicators: z
     .array(z.string().trim().min(1))
-    .min(1, "Add at least one key interest area.")
-    .max(10, "Keep it to 10 interest areas or fewer."),
-  detail_level: z.enum(["brief", "standard", "deep"]),
-  frequency: z.enum(["manual", "daily", "every_3_days", "weekly"]),
-  status: z.enum(["active", "paused"]),
+    .max(10)
+    .catch([]),
 });
+
+const topicInputSchema = z
+  .object({
+    title: z
+      .string()
+      .trim()
+      .min(1, "Give your topic a short title.")
+      .max(120, "Keep the title under 120 characters."),
+    description: z
+      .string()
+      .trim()
+      .min(10, "Describe what you want to understand (at least 10 characters)."),
+    interest_frame: z
+      .array(interestFactorSchema)
+      .min(1, "Add at least one factor to the interest frame.")
+      .max(10, "Keep it to 10 factors or fewer."),
+    watch_mode: z.enum(["monitor", "question"]),
+    analytical_question: z.string().trim().max(300),
+    detail_level: z.enum(["brief", "standard", "deep"]),
+    frequency: z.enum(["manual", "daily", "every_3_days", "weekly"]),
+    status: z.enum(["active", "paused"]),
+  })
+  .superRefine((data, ctx) => {
+    if (data.watch_mode === "question" && !data.analytical_question) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["analytical_question"],
+        message: "State the question this topic should answer.",
+      });
+    }
+  })
+  // Monitor topics never carry a stale question; store null, not "".
+  .transform((data) => ({
+    ...data,
+    analytical_question:
+      data.watch_mode === "question" ? data.analytical_question : null,
+  }));
 
 export interface TopicFormState {
   error?: string;
   fieldErrors?: Partial<Record<string, string>>;
 }
 
+/** The frame editor serializes its state into one hidden JSON field. */
+function parseFrameField(value: FormDataEntryValue | null): unknown {
+  try {
+    const parsed: unknown = JSON.parse(String(value ?? "[]"));
+    if (!Array.isArray(parsed)) return [];
+    // Blank rows (no factor name) are editor leftovers, not input errors.
+    return parsed.filter(
+      (f) =>
+        typeof f === "object" &&
+        f !== null &&
+        String((f as { name?: unknown }).name ?? "").trim() !== "",
+    );
+  } catch {
+    return [];
+  }
+}
+
 function parseTopicForm(formData: FormData) {
   const raw = {
     title: String(formData.get("title") ?? ""),
     description: String(formData.get("description") ?? ""),
-    // One form field per item (itemized editor); tolerate pasted bullets.
-    interest_areas: formData
-      .getAll("interest_areas")
-      .map((value) => String(value).replace(/^[-•*]\s*/, "").trim())
-      .filter(Boolean),
+    interest_frame: parseFrameField(formData.get("interest_frame")),
+    watch_mode: String(formData.get("watch_mode") ?? "monitor"),
+    analytical_question: String(formData.get("analytical_question") ?? ""),
     detail_level: String(formData.get("detail_level") ?? "standard"),
     frequency: String(formData.get("frequency") ?? "daily"),
     status: String(formData.get("status") ?? "active"),
@@ -70,10 +119,14 @@ function parseTopicForm(formData: FormData) {
 async function storeNewsQuery(
   supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
   topicId: string,
-  topic: { title: string; description: string; interest_areas: string[] },
+  topic: { title: string; description: string; interest_frame: InterestFactor[] },
 ): Promise<void> {
   try {
-    const query = await generateNewsQuery(openAiLlm, topic);
+    const query = await generateNewsQuery(openAiLlm, {
+      title: topic.title,
+      description: topic.description,
+      interest_areas: frameFactorNames(topic.interest_frame),
+    });
     if (query) {
       await supabase
         .from("topics")
@@ -155,6 +208,35 @@ export async function updateTopic(
   redirect(`/topics/${topicId}`);
 }
 
+/**
+ * Drafts an Interest Frame from the topic's title/goal (and analytical
+ * question, if any) for the form's "Suggest frame" button. The user edits
+ * the draft before saving — nothing is persisted here.
+ */
+export async function draftInterestFrame(input: {
+  title: string;
+  description: string;
+  analytical_question?: string | null;
+}): Promise<{ factors?: InterestFactor[]; error?: string }> {
+  await requireUser();
+  const title = input.title.trim();
+  const description = input.description.trim();
+  if (!title && !description) {
+    return { error: "Fill in the title and goal first." };
+  }
+  try {
+    const factors = await generateInterestFrame(openAiLlm, {
+      title,
+      description,
+      analytical_question: input.analytical_question?.trim() || null,
+    });
+    return { factors };
+  } catch (err) {
+    console.error("interest frame drafting failed", err);
+    return { error: "Could not draft a frame. Add factors manually or retry." };
+  }
+}
+
 function flattenErrors(error: z.ZodError): Partial<Record<string, string>> {
   const out: Partial<Record<string, string>> = {};
   for (const issue of error.issues) {
@@ -219,6 +301,21 @@ function parseMentorFocus(value: FormDataEntryValue | null): MentorFocus {
   return MENTOR_FOCUSES.includes(focus) ? focus : "concepts";
 }
 
+/** Long enough for "Prof. James Chin"; short enough to sit in a panel header. */
+const EXPERT_NAME_MAX = 60;
+
+/** A display name for an expert; blank falls back to the kind's default. */
+function parseExpertName(
+  value: FormDataEntryValue | null,
+  fallback: string,
+): string {
+  const name = String(value ?? "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, EXPERT_NAME_MAX);
+  return name || fallback;
+}
+
 export async function addMentorExpert(
   topicId: string,
   formData: FormData,
@@ -253,7 +350,7 @@ export async function addAnalystExpert(
     topic_id: topicId,
     user_id: user.id,
     kind: "analyst",
-    name: "Analyst",
+    name: parseExpertName(formData.get("name"), "Analyst"),
     status: "active",
     // Empty focus falls back to the topic's own description at run time.
     config: focus ? { focus } : {},
@@ -263,7 +360,8 @@ export async function addAnalystExpert(
   revalidatePath(`/topics/${topicId}`);
 }
 
-export async function updateExpertFocus(
+/** Analyst display name + specialization. */
+export async function updateAnalystSettings(
   expertId: string,
   formData: FormData,
 ): Promise<void> {
@@ -280,12 +378,15 @@ export async function updateExpertFocus(
   await supabase
     .from("experts")
     .update({
+      name: parseExpertName(formData.get("name"), "Analyst"),
       config: { ...expert.config, focus: focus || undefined },
       updated_at: new Date().toISOString(),
     })
     .eq("id", expertId);
 
   revalidatePath(`/topics/${expert.topic_id}/experts`);
+  // The briefing shows the expert's name on its panel.
+  revalidatePath(`/topics/${expert.topic_id}`);
 }
 
 export async function updateMentorSettings(
@@ -507,7 +608,7 @@ export async function seedSampleTopics(): Promise<void> {
         user_id: user.id,
         title: seed.title,
         description: seed.description,
-        interest_areas: seed.interest_areas,
+        interest_frame: seed.interest_frame,
         detail_level: seed.detail_level,
         frequency: seed.frequency,
         status: "active",

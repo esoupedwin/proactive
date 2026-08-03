@@ -1,12 +1,13 @@
 import { stripEntityMarkers } from "./entities";
 import { takeawayPoints } from "./reports";
-import type {
-  AnalystAnalysis,
-  Expert,
-  ExpertOutput,
-  MentorTip,
-  ReportSections,
-  ScenarioLikelihood,
+import {
+  isAnalystCommentary,
+  type AnalystAnalysis,
+  type Expert,
+  type ExpertOutput,
+  type MentorTip,
+  type ReportSections,
+  type ScenarioLikelihood,
 } from "./types";
 
 /**
@@ -74,6 +75,11 @@ function mentorLines(name: string, tips: MentorTip[]): string[] {
 }
 
 function analystLines(name: string, analysis: AnalystAnalysis): string[] {
+  if (isAnalystCommentary(analysis)) {
+    const commentary = sentence(analysis.commentary);
+    return section(`From ${name}.`, commentary ? [commentary] : []);
+  }
+
   const lines: string[] = [];
 
   const assessment = sentence(analysis.assessment);
@@ -132,32 +138,59 @@ export function buildSpeechScript(options: {
 
   if (sections.no_meaningful_change) {
     parts.push(
-      "Nothing significant has changed for this topic since the previous update.",
+      sections.verdict
+        ? "Nothing new bears on this question since the previous update; the standing assessment follows."
+        : "Nothing significant has changed for this topic since the previous update.",
     );
   }
 
-  parts.push(
-    ...section(
-      "Here's the overall takeaway.",
-      takeawayPoints(sections.cross_source_takeaway).map(sentence),
-    ),
-    ...section(
-      "Now the latest developments.",
-      bulletsToProse(sections.latest_developments),
-    ),
-    ...section(
-      "Here's what the community is saying on Reddit.",
-      bulletsToProse(sections.community_reaction),
-    ),
-    ...section(
-      "And what practitioners are writing on Medium.",
-      bulletsToProse(sections.practitioner_view),
-    ),
-    ...section(
-      "Here's what changed since last time.",
-      bulletsToProse(sections.what_changed),
-    ),
-  );
+  if (sections.verdict) {
+    // Question-mode assessment: verdict, factor evidence, what changed.
+    const v = sections.verdict;
+    parts.push(
+      ...section("Here's the current assessment.", [
+        `${LIKELIHOOD_PHRASE[v.likelihood]}, with ${v.confidence} confidence. ${sentence(v.answer)}`,
+        ...bulletsToProse(v.rationale),
+      ]),
+    );
+    for (const fa of sections.factor_assessments ?? []) {
+      parts.push(
+        ...section(
+          `On ${stripEntityMarkers(fa.factor)}.`,
+          bulletsToProse(fa.bullets),
+        ),
+      );
+    }
+    parts.push(
+      ...section(
+        "Here's what changed since last time.",
+        bulletsToProse(sections.what_changed),
+      ),
+    );
+  } else {
+    parts.push(
+      ...section(
+        "Here's the overall takeaway.",
+        takeawayPoints(sections.cross_source_takeaway).map(sentence),
+      ),
+      ...section(
+        "Now the latest developments.",
+        bulletsToProse(sections.latest_developments),
+      ),
+      ...section(
+        "Here's what the community is saying on Reddit.",
+        bulletsToProse(sections.community_reaction),
+      ),
+      ...section(
+        "And what practitioners are writing on Medium.",
+        bulletsToProse(sections.practitioner_view),
+      ),
+      ...section(
+        "Here's what changed since last time.",
+        bulletsToProse(sections.what_changed),
+      ),
+    );
+  }
 
   for (const { expert, output } of experts) {
     if (!output) continue;

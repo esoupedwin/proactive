@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { expandMentorTip } from "@/lib/ai/experts/mentor";
 import { createOpenAiLlm } from "@/lib/ai/openai";
+import { foldUsageIntoReport } from "@/lib/ai/report-usage";
 import { addUsage, createUsageCollector } from "@/lib/ai/usage";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Expert, ExpertOutput, Topic } from "@/lib/types";
@@ -95,6 +96,8 @@ export async function POST(
       .from("expert_outputs")
       .update({ output: { ...output.output, tips, usage } })
       .eq("id", output.id);
+    // ...and into the report's total, which the run's snapshot predates.
+    await foldUsageIntoReport(supabase, output.report_id, delta);
 
     return NextResponse.json({ ok: true, more });
   } catch (err) {

@@ -10,10 +10,10 @@ import {
 } from "../client";
 import type { ExtractStore } from "../extract-store";
 import type { ReporterPersistence } from "../report-store";
-import type { ReporterFinal } from "../schemas";
+import type { QuestionReporterFinal, ReporterFinal } from "../schemas";
 import { createTracingModelProvider } from "../usage-adapter";
 import { buildReporterAgent } from "./agent";
-import { composeReport } from "./compose";
+import { composeQuestionReport, composeReport } from "./compose";
 import type { ReporterToolDeps } from "./tools";
 
 export interface ReporterRunResult {
@@ -103,12 +103,16 @@ export async function runReporter(options: {
       trace,
     });
 
+    const question = topic.watch_mode === "question";
     const input = JSON.stringify({
       now: startedAt,
-      instruction:
-        "Bring the user up to date on this topic. Start with get_new_extracts.",
+      instruction: question
+        ? "Assess the analytical question against the consolidated evidence. Start with get_new_extracts."
+        : "Bring the user up to date on this topic. Start with get_new_extracts.",
       previous_report: previousReport?.sections ?? null,
       previous_report_date: previousReport?.created_at ?? null,
+      // Question mode: the verdict the trend must be judged against.
+      previous_verdict: previousReport?.sections?.verdict ?? null,
       user_feedback: feedback.map((f) => ({
         rating: f.rating,
         comment: f.comment ?? "",
@@ -136,13 +140,18 @@ export async function runReporter(options: {
       maxTurns: options.maxTurns ?? DEFAULT_MAX_TURNS,
     });
 
-    const final = result.finalOutput as ReporterFinal | undefined;
+    const final = result.finalOutput as
+      | ReporterFinal
+      | QuestionReporterFinal
+      | undefined;
     if (!final) {
       throw new Error("reporter agent produced no final output");
     }
 
-    setStage("Writing your briefing");
-    const composed = composeReport(final, deps.served);
+    setStage(question ? "Weighing the evidence" : "Writing your briefing");
+    const composed = question
+      ? composeQuestionReport(final as QuestionReporterFinal, deps.served)
+      : composeReport(final as ReporterFinal, deps.served);
     const sections = composed.sections;
 
     // Best-effort cover image — never fails the run.

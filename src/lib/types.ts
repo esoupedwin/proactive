@@ -5,6 +5,23 @@ export type TopicStatus = "active" | "paused";
 export type UpdateFrequency = "manual" | "daily" | "every_3_days" | "weekly";
 export type ReportStatus = "generating" | "ready" | "error";
 export type SourceType = "news" | "reddit" | "medium";
+/** How Proactive watches a topic: classic briefing vs. answering a question. */
+export type WatchMode = "monitor" | "question";
+
+/** One row of a topic's Interest Frame. */
+export interface InterestFactor {
+  /** Short factor name, e.g. "Political Incentives". */
+  name: string;
+  /** What this factor should answer, e.g. "Does UMNO gain more by staying?". */
+  key_question: string;
+  /** Observable indicators to watch, e.g. "polling trends". */
+  indicators: string[];
+}
+
+/** Factor names only — for prompts and queries that need the flat list. */
+export function frameFactorNames(frame: InterestFactor[]): string[] {
+  return frame.map((f) => f.name);
+}
 
 export interface Profile {
   id: string;
@@ -24,7 +41,11 @@ export interface Topic {
   user_id: string;
   title: string;
   description: string;
-  interest_areas: string[];
+  interest_frame: InterestFactor[];
+  /** How this topic is watched; 'question' topics get assessment reports. */
+  watch_mode: WatchMode;
+  /** The question to answer; set when watch_mode is 'question'. */
+  analytical_question: string | null;
   detail_level: DetailLevel;
   frequency: UpdateFrequency;
   status: TopicStatus;
@@ -52,6 +73,33 @@ export interface HeroImage {
   description?: string | null;
 }
 
+/** How the current verdict compares to the previous report's. */
+export type VerdictTrend =
+  | "baseline"
+  | "strengthened"
+  | "weakened"
+  | "reversed"
+  | "unchanged";
+
+/** Question mode: the report's answer to the topic's analytical question. */
+export interface QuestionVerdict {
+  /** One-sentence current answer, e.g. "UMNO is unlikely to leave the UG." */
+  answer: string;
+  likelihood: ScenarioLikelihood;
+  confidence: "low" | "medium" | "high";
+  /** 'baseline' on the first assessment; movement vs. the previous one after. */
+  trend: VerdictTrend;
+  /** The strongest drivers behind the verdict, cited. */
+  rationale: ReportBullet[];
+}
+
+/** Question mode: what the extracts say about one frame factor. */
+export interface FactorAssessment {
+  /** Frame factor name this assessment answers for. */
+  factor: string;
+  bullets: ReportBullet[];
+}
+
 /** Structured report body stored in reports.sections (jsonb). */
 export interface ReportSections {
   /** Optional cover image shown above Latest Developments. */
@@ -64,6 +112,10 @@ export interface ReportSections {
   what_changed: ReportBullet[];
   /** True when the pipeline judged there was nothing meaningful to add. */
   no_meaningful_change: boolean;
+  /** Question mode only: the overall answer. Absent on monitor reports. */
+  verdict?: QuestionVerdict | null;
+  /** Question mode only: per-factor assessments against the interest frame. */
+  factor_assessments?: FactorAssessment[];
 }
 
 /** Aggregated OpenAI usage for one generation run. */
@@ -205,12 +257,30 @@ export interface AnalystScenarioUpdate {
   note: string;
 }
 
-export interface AnalystAnalysis {
+/** What the analyst writes today: standalone commentary through its lens. */
+export interface AnalystCommentary {
+  commentary: string;
+}
+
+/**
+ * The structured shape the analyst produced before the commentary redesign.
+ * Still stored on past reports, so the renderers keep handling it.
+ */
+export interface LegacyAnalystAnalysis {
   assessment: string;
   why_it_matters: string[];
   outlook: AnalystOutlook[];
   scenario_updates: AnalystScenarioUpdate[];
   caveats: string;
+}
+
+export type AnalystAnalysis = AnalystCommentary | LegacyAnalystAnalysis;
+
+/** Narrows a stored analysis to the current commentary shape. */
+export function isAnalystCommentary(
+  analysis: AnalystAnalysis,
+): analysis is AnalystCommentary {
+  return typeof (analysis as AnalystCommentary).commentary === "string";
 }
 
 /** Union payload — which fields are present depends on the expert kind. */
@@ -243,7 +313,10 @@ export interface MentorMemoryData {
   taught: TaughtConcept[];
 }
 
-/** The analyst's own track record: every forward scenario it has issued. */
+/**
+ * The analyst's forward-scenario track record. Retired with the commentary
+ * redesign — kept so memory rows written by earlier runs still type-check.
+ */
 export interface TrackedScenario {
   id: string;
   scenario: string;
@@ -254,9 +327,6 @@ export interface TrackedScenario {
   note?: string;
 }
 
-export interface AnalystMemoryData {
-  scenarios: TrackedScenario[];
-}
 
 /** Union payload — which fields are present depends on the expert kind. */
 export interface ExpertMemoryData {
@@ -348,6 +418,8 @@ export interface ExtractRecord {
   /** Normalized url (dedupe key within a topic). */
   canonical_url: string;
   published_at: string | null;
+  /** Frame factor this extract belongs to; null when it fits none cleanly. */
+  factor: string | null;
   gist: string;
   relevance: string | null;
   novelty: string | null;

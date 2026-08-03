@@ -12,7 +12,7 @@ import {
 } from "@/lib/news-search";
 import { freshnessDays } from "@/lib/reports";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import type { Topic } from "@/lib/types";
+import { frameFactorNames, type Topic } from "@/lib/types";
 
 export const maxDuration = 60;
 
@@ -62,7 +62,11 @@ export async function GET(
   let query = topic.news_query?.trim() || null;
   if (!query) {
     try {
-      query = await generateNewsQuery(openAiLlm, topic);
+      query = await generateNewsQuery(openAiLlm, {
+        title: topic.title,
+        description: topic.description,
+        interest_areas: frameFactorNames(topic.interest_frame),
+      });
       await supabase
         .from("topics")
         .update({ news_query: query })

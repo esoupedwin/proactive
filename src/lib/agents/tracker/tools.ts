@@ -48,6 +48,7 @@ export async function searchExistingExtracts(
       id: e.id,
       title: e.title,
       url: e.url,
+      factor: e.factor ?? "",
       gist: e.gist,
       novelty: e.novelty,
       recorded_at: e.created_at,

@@ -232,6 +232,7 @@ export default async function TopicBriefingPage({
             sections={readyReport.sections}
             sources={sources}
             fallbackEntities={fallbackEntities}
+            question={topic.analytical_question}
           />
           <ReportFeedback
             reportId={readyReport.id}

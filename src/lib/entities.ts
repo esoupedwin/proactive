@@ -38,8 +38,11 @@ export function hasEntityMarkers(sections: ReportSections): boolean {
     ...sections.community_reaction,
     ...sections.practitioner_view,
     ...sections.what_changed,
+    ...(sections.verdict?.rationale ?? []),
+    ...(sections.factor_assessments ?? []).flatMap((fa) => fa.bullets),
   ].map((b) => b.text);
   texts.push(...takeawayPoints(sections.cross_source_takeaway));
+  if (sections.verdict) texts.push(sections.verdict.answer);
   return texts.some((t) => /\*\*[^*]+\*\*/.test(t));
 }
 

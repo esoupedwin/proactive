@@ -24,6 +24,8 @@ export interface CreateExtractInput {
   publisher: string;
   url: string;
   published_at: string;
+  /** Interest-frame factor this belongs to; null when it fits none. */
+  factor: string | null;
   gist: string;
   relevance: string;
   novelty: "new" | "update";
@@ -163,6 +165,7 @@ export function createSupabaseExtractStore(
           url: input.url,
           canonical_url: canonical,
           published_at: input.published_at || null,
+          factor: input.factor || null,
           gist: input.gist,
           relevance: input.relevance || null,
           novelty: input.novelty,
@@ -365,6 +368,7 @@ export function createInMemoryExtractStore(): ExtractStore & {
         url: input.url,
         canonical_url: canonical,
         published_at: input.published_at || null,
+        factor: input.factor || null,
         gist: input.gist,
         relevance: input.relevance || null,
         novelty: input.novelty,

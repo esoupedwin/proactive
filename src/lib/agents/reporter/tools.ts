@@ -27,6 +27,7 @@ function summarize(e: ExtractRecord) {
     publisher: e.publisher ?? "",
     url: e.url,
     published_at: e.published_at ?? "unknown",
+    factor: e.factor ?? "",
     gist: e.gist,
     relevance: e.relevance ?? "",
     novelty: e.novelty ?? "",

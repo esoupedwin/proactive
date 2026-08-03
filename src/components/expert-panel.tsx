@@ -2,15 +2,17 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { Bot, Check, Landmark, RotateCcw } from "lucide-react";
+import { Bot, Check, Landmark, RefreshCw, RotateCcw } from "lucide-react";
 import { mentorTipFeedback } from "@/lib/actions";
 import { formatTokens, formatUsdDetailed } from "@/lib/reports";
-import type {
-  AnalystAnalysis,
-  Expert,
-  ExpertOutput,
-  MentorTip,
-  ScenarioLikelihood,
+import {
+  isAnalystCommentary,
+  type AnalystAnalysis,
+  type Expert,
+  type ExpertOutput,
+  type LegacyAnalystAnalysis,
+  type MentorTip,
+  type ScenarioLikelihood,
 } from "@/lib/types";
 import { Badge, Spinner } from "./ui";
 
@@ -42,6 +44,39 @@ export function ExpertPanel({
   );
 }
 
+/**
+ * Runs — or re-runs — one expert against one report. The route upserts on
+ * (expert, report), so a re-run replaces that expert's section in place.
+ */
+function useExpertRun(expertId: string, reportId: string) {
+  const router = useRouter();
+  const [state, setState] = useState<"idle" | "loading" | "error">("idle");
+  // router.refresh() resolves after the server re-renders; keeping it in a
+  // transition holds the busy state until the new output is actually on screen.
+  const [isRefreshing, startTransition] = useTransition();
+
+  async function run() {
+    setState("loading");
+    try {
+      const res = await fetch(`/api/experts/${expertId}/run`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ reportId }),
+      });
+      if (res.ok) {
+        setState("idle");
+        startTransition(() => router.refresh());
+      } else {
+        setState("error");
+      }
+    } catch {
+      setState("error");
+    }
+  }
+
+  return { run, busy: state === "loading" || isRefreshing, failed: state === "error" };
+}
+
 function ExpertCard({
   expert,
   output,
@@ -52,6 +87,8 @@ function ExpertCard({
   reportId: string;
 }) {
   const isAnalyst = expert.kind === "analyst";
+  const { run, busy, failed } = useExpertRun(expert.id, reportId);
+
   return (
     <div className="rounded-md border border-rule">
       <div className="flex items-center gap-3 border-b border-rule px-4 py-3">
@@ -61,7 +98,7 @@ function ExpertCard({
         >
           {isAnalyst ? <Landmark className="size-5" /> : <Bot className="size-5" />}
         </span>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="text-sm font-bold">{expert.name}</p>
           <p className="truncate text-xs text-ink-faint">
             {isAnalyst
@@ -73,37 +110,69 @@ function ExpertCard({
                 } · ${expert.config.level ?? "basic"} level`}
           </p>
         </div>
+        {output && (
+          <button
+            type="button"
+            onClick={run}
+            disabled={busy}
+            title={`Run ${expert.name} again on this report`}
+            aria-label={`Run ${expert.name} again on this report`}
+            className="inline-flex size-9 shrink-0 items-center justify-center rounded-md border border-rule text-ink-faint hover:bg-neutral-100 hover:text-ink disabled:opacity-50"
+          >
+            {busy ? (
+              <Spinner className="size-4" />
+            ) : (
+              <RefreshCw className="size-4" aria-hidden />
+            )}
+          </button>
+        )}
       </div>
 
+      {output && failed && (
+        <p className="border-b border-rule px-4 py-2 text-xs text-red-700">
+          {expert.name} could not re-run on this report. Try again.
+        </p>
+      )}
+
       {output ? (
-        isAnalyst ? (
-          output.output.analysis ? (
-            <AnalystBody analysis={output.output.analysis} />
+        <div
+          aria-busy={busy}
+          className={busy ? "opacity-50 transition-opacity" : undefined}
+        >
+          {isAnalyst ? (
+            output.output.analysis ? (
+              <AnalystBody analysis={output.output.analysis} />
+            ) : (
+              <p className="px-4 py-4 text-sm text-ink-faint">
+                No analysis recorded for this report.
+              </p>
+            )
           ) : (
-            <p className="px-4 py-4 text-sm text-ink-faint">
-              No analysis recorded for this report.
-            </p>
-          )
-        ) : (
-          <ul className="divide-y divide-rule">
-            {(output.output.tips ?? []).map((tip) => (
-              <TipCard
-                key={tip.id}
-                tip={tip}
-                expertId={expert.id}
-                outputId={output.id}
-              />
-            ))}
-            {(output.output.tips ?? []).length === 0 && (
-              <li className="px-4 py-4 text-sm text-ink-faint">
-                Nothing new to explain in this report — you know this ground
-                already.
-              </li>
-            )}
-          </ul>
-        )
+            <ul className="divide-y divide-rule">
+              {(output.output.tips ?? []).map((tip) => (
+                <TipCard
+                  key={tip.id}
+                  tip={tip}
+                  expertId={expert.id}
+                  outputId={output.id}
+                />
+              ))}
+              {(output.output.tips ?? []).length === 0 && (
+                <li className="px-4 py-4 text-sm text-ink-faint">
+                  Nothing new to explain in this report — you know this ground
+                  already.
+                </li>
+              )}
+            </ul>
+          )}
+        </div>
       ) : (
-        <RunExpertPrompt expert={expert} reportId={reportId} />
+        <RunExpertPrompt
+          expert={expert}
+          run={run}
+          busy={busy}
+          failed={failed}
+        />
       )}
 
       {output?.output.usage && output.output.usage.calls > 0 && (
@@ -135,6 +204,20 @@ const LIKELIHOOD_TONE: Record<
 };
 
 function AnalystBody({ analysis }: { analysis: AnalystAnalysis }) {
+  if (isAnalystCommentary(analysis)) {
+    return (
+      <div className="px-4 py-4">
+        <p className="whitespace-pre-wrap text-sm leading-relaxed">
+          {analysis.commentary}
+        </p>
+      </div>
+    );
+  }
+  return <LegacyAnalystBody analysis={analysis} />;
+}
+
+/** Renders analyses stored before the analyst became a commentator. */
+function LegacyAnalystBody({ analysis }: { analysis: LegacyAnalystAnalysis }) {
   return (
     <div className="space-y-4 px-4 py-4 text-sm leading-relaxed">
       <section aria-label="Assessment">
@@ -370,41 +453,24 @@ function FeedbackButton({
 
 function RunExpertPrompt({
   expert,
-  reportId,
+  run,
+  busy,
+  failed,
 }: {
   expert: Expert;
-  reportId: string;
+  run: () => void;
+  busy: boolean;
+  failed: boolean;
 }) {
-  const router = useRouter();
-  const [state, setState] = useState<"idle" | "loading" | "error">("idle");
-
-  async function run() {
-    setState("loading");
-    try {
-      const res = await fetch(`/api/experts/${expert.id}/run`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ reportId }),
-      });
-      if (res.ok) {
-        router.refresh();
-      } else {
-        setState("error");
-      }
-    } catch {
-      setState("error");
-    }
-  }
-
   return (
     <div className="px-4 py-4">
       <button
         type="button"
         onClick={run}
-        disabled={state === "loading"}
+        disabled={busy}
         className="inline-flex min-h-9 items-center gap-2 rounded-md border border-rule px-3 text-sm font-medium hover:bg-neutral-100 disabled:opacity-50"
       >
-        {state === "loading" ? (
+        {busy ? (
           <>
             <Spinner /> {expert.name} is reading the report…
           </>
@@ -412,7 +478,7 @@ function RunExpertPrompt({
           <>Ask {expert.name} to review this report</>
         )}
       </button>
-      {state === "error" && (
+      {failed && (
         <p className="mt-2 text-xs text-red-700">
           {expert.name} could not review this report. Try again.
         </p>
