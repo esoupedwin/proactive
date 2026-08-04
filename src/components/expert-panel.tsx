@@ -5,12 +5,14 @@ import { useState, useTransition } from "react";
 import {
   Bot,
   Check,
+  ExternalLink,
   Landmark,
   MessagesSquare,
   RefreshCw,
   RotateCcw,
 } from "lucide-react";
 import { mentorTipFeedback } from "@/lib/actions";
+import { linkBadgeLabel, splitMarkdownLinks } from "@/lib/md-links";
 import { formatTokens, formatUsdDetailed } from "@/lib/reports";
 import {
   isAnalystCommentary,
@@ -156,11 +158,7 @@ function ExpertCard({
         >
           {expert.kind === "sentiment" ? (
             output.output.sentiment ? (
-              <div className="px-4 py-4">
-                <p className="whitespace-pre-wrap text-sm leading-relaxed">
-                  {output.output.sentiment.commentary}
-                </p>
-              </div>
+              <SentimentBody reading={output.output.sentiment} />
             ) : (
               <p className="px-4 py-4 text-sm text-ink-faint">
                 No sentiment reading recorded for this report.
@@ -218,6 +216,72 @@ function ExpertCard({
         </p>
       )}
     </div>
+  );
+}
+
+/** Point-form sentiment reading; older stored outputs were one prose blob. */
+function SentimentBody({
+  reading,
+}: {
+  reading: { points?: string[]; commentary?: string };
+}) {
+  if (reading.points?.length) {
+    return (
+      <ul className="space-y-2.5 px-4 py-4">
+        {reading.points.map((point, i) => (
+          <li key={i} className="flex gap-2 text-sm leading-relaxed">
+            <span aria-hidden className="select-none text-ink-faint">
+              •
+            </span>
+            <span className="min-w-0">
+              <CommentaryWithLinkBadges text={point} inline />
+            </span>
+          </li>
+        ))}
+      </ul>
+    );
+  }
+  return (
+    <div className="px-4 py-4">
+      <CommentaryWithLinkBadges text={reading.commentary ?? ""} />
+    </div>
+  );
+}
+
+/**
+ * Prose with inline markdown citations rendered as compact clickable badges
+ * (e.g. "r/indonesia ↗") instead of raw [label](url) text.
+ * Renders inline (span) inside list bullets, as a paragraph otherwise.
+ */
+function CommentaryWithLinkBadges({
+  text,
+  inline = false,
+}: {
+  text: string;
+  inline?: boolean;
+}) {
+  const segments = splitMarkdownLinks(text);
+  const Tag = inline ? "span" : "p";
+  return (
+    <Tag className="whitespace-pre-wrap text-sm leading-relaxed">
+      {segments.map((segment, i) =>
+        segment.type === "text" ? (
+          <span key={i}>{segment.text}</span>
+        ) : (
+          <a
+            key={i}
+            href={segment.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={segment.url}
+            className="mx-0.5 inline-flex translate-y-[-1px] items-center gap-1 rounded-full border border-rule bg-neutral-50 px-2 py-0.5 align-middle text-[11px] font-medium text-ink-soft hover:bg-neutral-100 hover:text-ink"
+          >
+            {linkBadgeLabel(segment.url, segment.label)}
+            <ExternalLink className="size-3" aria-hidden />
+          </a>
+        ),
+      )}
+    </Tag>
   );
 }
 

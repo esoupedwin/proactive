@@ -32,7 +32,7 @@ const sections: ReportSections = {
   no_meaningful_change: false,
 };
 
-/** Captures the call and returns a fixed commentary. */
+/** Captures the call and returns fixed points. */
 function fakeLlm(): { llm: Llm; captured: () => StructuredCallOptions<unknown> } {
   let seen: StructuredCallOptions<unknown> | null = null;
   return {
@@ -40,7 +40,11 @@ function fakeLlm(): { llm: Llm; captured: () => StructuredCallOptions<unknown> }
       async structured<T>(options: StructuredCallOptions<T>): Promise<T> {
         seen = options as StructuredCallOptions<unknown>;
         return options.schema.parse({
-          commentary: "  r/malaysia is broadly skeptical of the reshuffle.  ",
+          points: [
+            "  r/malaysia is broadly skeptical of the reshuffle.  ",
+            "A minority sees it as routine housekeeping.",
+            "   ",
+          ],
         });
       },
     },
@@ -49,11 +53,14 @@ function fakeLlm(): { llm: Llm; captured: () => StructuredCallOptions<unknown> }
 }
 
 describe("runSentiment", () => {
-  it("returns a trimmed sentiment reading", async () => {
+  it("returns trimmed point-form findings, dropping empty points", async () => {
     const { llm } = fakeLlm();
     const result = await runSentiment(llm, topic, sections);
     expect(result.sentiment).toEqual({
-      commentary: "r/malaysia is broadly skeptical of the reshuffle.",
+      points: [
+        "r/malaysia is broadly skeptical of the reshuffle.",
+        "A minority sees it as routine housekeeping.",
+      ],
     });
   });
 
@@ -77,10 +84,10 @@ describe("runSentiment", () => {
     expect(instructions).toContain("at most 3 searches");
   });
 
-  it("rejects a response missing the commentary field", async () => {
+  it("rejects a response missing the points field", async () => {
     const llm: Llm = {
       async structured<T>(options: StructuredCallOptions<T>): Promise<T> {
-        return options.schema.parse({ mood: "wrong shape" });
+        return options.schema.parse({ commentary: "old prose shape" });
       },
     };
     await expect(runSentiment(llm, topic, sections)).rejects.toThrow();

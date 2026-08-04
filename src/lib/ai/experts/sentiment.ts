@@ -11,10 +11,12 @@ import { plainReportText } from "./report-text";
  */
 
 export const SentimentSchema = z.object({
-  commentary: z
-    .string()
+  points: z
+    .array(z.string())
+    .min(1)
+    .max(5)
     .describe(
-      "2-5 sentences on public sentiment around the report's main points, grounded in what Reddit discussions actually say. Plain prose — no headings or bullet points.",
+      "2-5 point-form findings on public sentiment around the report's main points, each a single standalone sentence grounded in what Reddit discussions actually say.",
     ),
 });
 
@@ -39,11 +41,12 @@ export async function runSentiment(
       "- Read for the prevailing mood (supportive, skeptical, angry, indifferent, split), the arguments behind it, and any notable minority view.",
       "",
       "Writing rules:",
-      "- 2-5 sentences of plain prose that can be read on its own below the report.",
+      "- 2-5 POINT-FORM findings, most significant first. Each point is ONE standalone sentence — a distinct finding, not a fragment of a paragraph.",
+      "- Lead with the overall mood (supportive, skeptical, angry, indifferent, split); the remaining points cover the main reactions, notable minority views, and any divergence from the report's own framing — that contrast is the value.",
       "- Ground every claim in what the discussions actually say — name the community when it matters (e.g. r/malaysia). Never invent threads, quotes, or vote counts.",
+      "- Cite the thread(s) behind each point inline as markdown links, e.g. ([reddit.com](https://www.reddit.com/r/...)). The app renders them as clickable badges.",
       "- Reddit sentiment is not public opinion: it skews online and vocal. Say when a reaction looks niche or thinly discussed.",
-      "- If you find little or no genuine discussion, say exactly that — low engagement is itself a finding. Do not pad.",
-      "- Note when sentiment diverges from the report's own framing — that contrast is the value.",
+      "- If you find little or no genuine discussion, return a single point saying exactly that — low engagement is itself a finding. Do not pad.",
     ].join("\n"),
     input: JSON.stringify({
       topic: { title: topic.title, goal: topic.description },
@@ -51,5 +54,9 @@ export async function runSentiment(
     }),
   });
 
-  return { sentiment: { commentary: result.commentary.trim() } };
+  return {
+    sentiment: {
+      points: result.points.map((p) => p.trim()).filter(Boolean),
+    },
+  };
 }

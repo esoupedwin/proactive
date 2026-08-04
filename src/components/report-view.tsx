@@ -157,12 +157,16 @@ const LIKELIHOOD_LABEL: Record<ScenarioLikelihood, string> = {
   unlikely: "Unlikely",
 };
 
+// "vs last report" is spelled out because the trend describes how the VERDICT
+// moved since the previous assessment — without it, a chip like "Weakened" is
+// easily misread as part of the answer itself (e.g. for a question that is
+// about something strengthening or weakening).
 const TREND_LABEL: Record<VerdictTrend, string> = {
   baseline: "Baseline assessment",
-  strengthened: "Strengthened",
-  weakened: "Weakened",
-  reversed: "Reversed",
-  unchanged: "Unchanged",
+  strengthened: "vs last report: Strengthened",
+  weakened: "vs last report: Weakened",
+  reversed: "vs last report: Reversed",
+  unchanged: "vs last report: Unchanged",
 };
 
 const TREND_CLASS: Record<VerdictTrend, string> = {

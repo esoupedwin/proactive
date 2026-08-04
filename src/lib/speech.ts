@@ -1,4 +1,5 @@
 import { stripEntityMarkers } from "./entities";
+import { stripMarkdownLinks } from "./md-links";
 import { takeawayPoints } from "./reports";
 import {
   isAnalystCommentary,
@@ -199,8 +200,12 @@ export function buildSpeechScript(options: {
     } else if (expert.kind === "mentor" && output.output.tips?.length) {
       parts.push(...mentorLines(expert.name, output.output.tips));
     } else if (expert.kind === "sentiment" && output.output.sentiment) {
-      const reading = sentence(output.output.sentiment.commentary);
-      parts.push(...section(`From ${expert.name}.`, reading ? [reading] : []));
+      // Citation links are for the eye; spoken, they are just noise.
+      const s = output.output.sentiment;
+      const lines = (s.points ?? [s.commentary ?? ""])
+        .map((p) => sentence(stripMarkdownLinks(p)))
+        .filter(Boolean);
+      parts.push(...section(`From ${expert.name}.`, lines));
     }
   }
 

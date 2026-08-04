@@ -285,7 +285,10 @@ export function isAnalystCommentary(
 
 /** Sentiment expert: what Reddit makes of the report's main points. */
 export interface SentimentReading {
-  commentary: string;
+  /** Point-form reading, one finding per point (current shape). */
+  points?: string[];
+  /** Prose reading, stored before the point-form redesign. */
+  commentary?: string;
 }
 
 /** Union payload — which fields are present depends on the expert kind. */
