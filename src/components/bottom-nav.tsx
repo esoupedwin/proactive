@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Settings } from "lucide-react";
 import { version } from "../../package.json";
 import { InfoButton } from "./info-button";
 import { LinkPending } from "./link-pending";
+import { TopicSwitcher } from "./topic-switcher";
 
 export interface NavTopic {
   id: string;
@@ -59,9 +60,7 @@ export function BottomNav({
             </span>
           )}
 
-          <span className="min-w-0 truncate text-sm font-semibold">
-            {current?.title ?? ""}
-          </span>
+          <TopicSwitcher topics={topics} current={current} />
 
           {hasSiblings && next ? (
             <Link

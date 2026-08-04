@@ -1,18 +1,28 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type {
-  Expert,
-  ExpertMemoryData,
-  ExpertOutput,
-  ExpertOutputData,
-  MentorMemoryData,
-  ReportSections,
-  Source,
-  Topic,
+import {
+  isAnalystCommentary,
+  type Expert,
+  type ExpertMemoryData,
+  type ExpertOutput,
+  type ExpertOutputData,
+  type ExtractRecord,
+  type MentorMemoryData,
+  type ReportSections,
+  type Source,
+  type Topic,
 } from "../../types";
+import { normalizeUrl } from "../dedupe";
 import type { Llm } from "../llm";
 import { diffUsage, type UsageCollector } from "../usage";
-import { runAnalyst } from "./analyst";
+import {
+  runAnalyst,
+  type AnalystPriorCommentary,
+} from "./analyst";
 import { runMentor } from "./mentor";
+
+/** Bound the analyst's per-run reading so cost stays predictable. */
+const ANALYST_MAX_NEW_EXTRACTS = 10;
+const ANALYST_PRIOR_COMMENTARIES = 3;
 
 /**
  * Runs an expert against one report and persists its output + memory.
@@ -74,14 +84,67 @@ export async function runExpertOnReport(options: {
       // reported fact vs community sentiment vs interpretation.
       const { data: sourceRows } = await supabase
         .from("sources")
-        .select("source_type, gist, novelty, contradiction")
+        .select("source_type, url, gist, novelty, contradiction")
         .eq("report_id", reportId);
-      const extracts = ((sourceRows ?? []) as Source[]).map((s) => ({
+      const reportSources = (sourceRows ?? []) as Source[];
+      const extracts = reportSources.map((s) => ({
         source_type: s.source_type,
         gist: s.gist,
         novelty: s.novelty ?? "",
         contradiction: s.contradiction ?? "",
       }));
+
+      // The raw record since its last review — including extracts the report
+      // did not cite — so it can challenge the assessment, not just echo it.
+      const cursor = memoryRow?.memory?.extract_cursor;
+      let extractQuery = supabase
+        .from("extracts")
+        .select(
+          "source_type, title, canonical_url, factor, published_at, gist, novelty, contradiction, corroborations, created_at",
+        )
+        .eq("topic_id", topic.id)
+        .order("created_at", { ascending: false })
+        .limit(ANALYST_MAX_NEW_EXTRACTS);
+      if (cursor) extractQuery = extractQuery.gt("created_at", cursor);
+      const { data: extractRows } = await extractQuery;
+      const newRows = ((extractRows ?? []) as ExtractRecord[]).reverse();
+
+      const citedUrls = new Set(
+        reportSources.map((s) => normalizeUrl(s.url)),
+      );
+      const newExtracts = newRows.map((e) => ({
+        source_type: e.source_type,
+        title: e.title,
+        factor: e.factor,
+        published_at: e.published_at,
+        gist: e.gist,
+        novelty: e.novelty ?? "",
+        contradiction: e.contradiction ?? "",
+        corroborations: e.corroborations,
+        cited_in_report: citedUrls.has(e.canonical_url),
+        recorded_at: e.created_at,
+      }));
+
+      // Its own recent commentaries, for continuity across reports.
+      const { data: priorRows } = await supabase
+        .from("expert_outputs")
+        .select("output, created_at")
+        .eq("expert_id", expert.id)
+        .neq("report_id", reportId)
+        .order("created_at", { ascending: false })
+        .limit(ANALYST_PRIOR_COMMENTARIES);
+      const previousCommentaries: AnalystPriorCommentary[] = (
+        (priorRows ?? []) as Pick<ExpertOutput, "output" | "created_at">[]
+      )
+        .flatMap(({ output: prior, created_at }) => {
+          const analysis = prior.analysis;
+          if (!analysis) return [];
+          const text = isAnalystCommentary(analysis)
+            ? analysis.commentary
+            : analysis.assessment; // pre-redesign shape
+          return text ? [{ at: created_at, commentary: text }] : [];
+        })
+        .reverse(); // oldest first, so the narrative reads forward
 
       const result = await runAnalyst(
         llm,
@@ -90,9 +153,15 @@ export async function runExpertOnReport(options: {
         expert.config.focus?.trim() ||
           `${topic.title} — ${topic.description}`,
         extracts,
+        newExtracts,
+        previousCommentaries,
       );
       output = { analysis: result.analysis };
-      // The analyst writes standalone commentary — it carries no memory.
+      // Advance the reading cursor past everything reviewed this run.
+      const lastSeen = newRows[newRows.length - 1]?.created_at;
+      if (lastSeen) {
+        newMemory = { ...memoryRow?.memory, extract_cursor: lastSeen };
+      }
       break;
     }
 

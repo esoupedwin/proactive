@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useState } from "react";
+import { useActionState, useState, type ReactNode } from "react";
 import { Plus, Sparkles, X } from "lucide-react";
 import { draftInterestFrame, type TopicFormState } from "@/lib/actions";
 import { formatDateTime, nextScheduledRun } from "@/lib/reports";
@@ -60,11 +60,14 @@ export function TopicForm({
   topic,
   heading,
   submitLabel,
+  footer,
 }: {
   action: (prev: TopicFormState, formData: FormData) => Promise<TopicFormState>;
   topic?: Topic;
   heading: string;
   submitLabel: string;
+  /** Rendered below the form — destructive actions live in their own form. */
+  footer?: ReactNode;
 }) {
   const [state, formAction, pending] = useActionState(action, EMPTY_STATE);
   const [factors, setFactors] = useState<FactorDraft[]>(() =>
@@ -387,6 +390,8 @@ export function TopicForm({
           </Link>
         </div>
       </form>
+
+      {footer}
     </main>
   );
 }

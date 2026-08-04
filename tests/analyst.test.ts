@@ -98,18 +98,65 @@ describe("runAnalyst", () => {
     expect(instructions).not.toContain("scenario_updates");
   });
 
-  it("sends the topic, report and sources — and no scenario track record", async () => {
+  it("sends the topic, report, sources and challenge material — no scenario track record", async () => {
     const { llm, captured } = fakeLlm();
     await runAnalyst(llm, topic, sections, "Malaysia's politics", sources);
 
     const input = JSON.parse(captured().input) as Record<string, unknown>;
-    expect(Object.keys(input).sort()).toEqual(["report", "sources", "topic"]);
+    expect(Object.keys(input).sort()).toEqual([
+      "new_extracts",
+      "previous_commentaries",
+      "report",
+      "sources",
+      "topic",
+    ]);
     expect(input.topic).toEqual({
       title: "Malaysia Politics",
       goal: "Follow Malaysian political developments",
     });
     expect(input.report).toContain("Audit committee reshuffled.");
     expect(input.sources).toHaveLength(1);
+    // Defaults when the caller has no cursor feed yet.
+    expect(input.new_extracts).toEqual([]);
+    expect(input.previous_commentaries).toEqual([]);
+  });
+
+  it("passes new extracts (with cited flags) and prior commentaries through", async () => {
+    const { llm, captured } = fakeLlm();
+    await runAnalyst(
+      llm,
+      topic,
+      sections,
+      "Malaysia's politics",
+      sources,
+      [
+        {
+          source_type: "news",
+          title: "Uncited audit story",
+          factor: "Oversight",
+          published_at: "2026-08-02",
+          gist: "A second committee lost its quorum.",
+          novelty: "new",
+          contradiction: "",
+          corroborations: 2,
+          cited_in_report: false,
+          recorded_at: "2026-08-03T00:00:00Z",
+        },
+      ],
+      [{ at: "2026-08-01T00:00:00Z", commentary: "Earlier take." }],
+    );
+
+    const input = JSON.parse(captured().input) as {
+      new_extracts: { title: string; cited_in_report: boolean }[];
+      previous_commentaries: { commentary: string }[];
+    };
+    expect(input.new_extracts[0]!.title).toBe("Uncited audit story");
+    expect(input.new_extracts[0]!.cited_in_report).toBe(false);
+    expect(input.previous_commentaries[0]!.commentary).toBe("Earlier take.");
+
+    const instructions = captured().instructions;
+    expect(instructions).toContain("cited_in_report");
+    expect(instructions).toContain("previous_commentaries");
   });
 
   it("runs on the report tier — commentary quality is the product", async () => {

@@ -332,6 +332,8 @@ export interface TrackedScenario {
 export interface ExpertMemoryData {
   taught?: TaughtConcept[];
   scenarios?: TrackedScenario[];
+  /** Analyst: max extracts.created_at it has reviewed (its reading cursor). */
+  extract_cursor?: string;
 }
 
 export interface ExpertMemory {

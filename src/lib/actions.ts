@@ -7,6 +7,7 @@ import { normalizeUrl } from "./ai/dedupe";
 import { generateInterestFrame } from "./ai/interest-frame";
 import { generateNewsQuery } from "./ai/news-query";
 import { openAiLlm } from "./ai/openai";
+import { isGenerationLocked } from "./reports";
 import { SEED_TOPICS } from "./seed-data";
 import { createSupabaseServerClient } from "./supabase/server";
 import { frameFactorNames } from "./types";
@@ -18,6 +19,7 @@ import type {
   MentorFocus,
   MentorLevel,
   MentorMemoryData,
+  Report,
   Topic,
 } from "./types";
 
@@ -268,6 +270,72 @@ export async function toggleTopicStatus(topicId: string): Promise<void> {
   revalidatePath(`/topics/${topicId}`);
 }
 
+/**
+ * Wipes everything a topic has learned — extracts, reports and every memory —
+ * while keeping the topic and its experts configured exactly as they are. The
+ * next update starts from nothing, as if the topic had just been created.
+ *
+ * Two deletes do most of the work through FK cascades: removing reports takes
+ * their sources, expert outputs and feedback with them; removing extracts
+ * takes their assessments.
+ */
+export async function resetTopic(topicId: string): Promise<void> {
+  const { supabase } = await requireUser();
+
+  // RLS scopes every statement below to the signed-in user; this only turns a
+  // bad id into a no-op rather than a silent partial wipe.
+  const { data: topic } = await supabase
+    .from("topics")
+    .select("id")
+    .eq("id", topicId)
+    .maybeSingle<Pick<Topic, "id">>();
+  if (!topic) redirect("/settings");
+
+  // Resetting under a live run would delete the rows it is still writing to,
+  // and it would repopulate the topic seconds later.
+  const { data: latestGenerating } = await supabase
+    .from("reports")
+    .select("status, created_at")
+    .eq("topic_id", topicId)
+    .eq("status", "generating")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<Pick<Report, "status" | "created_at">>();
+  if (isGenerationLocked(latestGenerating)) {
+    redirect(`/topics/${topicId}/edit?error=generating`);
+  }
+
+  // Expert memory is keyed by expert, not topic — resolve the ids first. The
+  // experts themselves are configuration and stay.
+  const { data: expertRows } = await supabase
+    .from("experts")
+    .select("id")
+    .eq("topic_id", topicId);
+  const expertIds = ((expertRows ?? []) as Pick<Expert, "id">[]).map(
+    (e) => e.id,
+  );
+  if (expertIds.length > 0) {
+    await supabase.from("expert_memory").delete().in("expert_id", expertIds);
+  }
+
+  await supabase.from("reports").delete().eq("topic_id", topicId);
+  await supabase.from("extracts").delete().eq("topic_id", topicId);
+  await supabase.from("agent_state").delete().eq("topic_id", topicId);
+  await supabase.from("topic_memory").delete().eq("topic_id", topicId);
+
+  // Clear the schedule anchor so the topic is due again immediately.
+  await supabase
+    .from("topics")
+    .update({ last_generated_at: null, updated_at: new Date().toISOString() })
+    .eq("id", topicId);
+
+  revalidatePath(`/topics/${topicId}`);
+  revalidatePath(`/topics/${topicId}/history`);
+  revalidatePath(`/topics/${topicId}/extracts`);
+  revalidatePath("/settings");
+  redirect(`/topics/${topicId}`);
+}
+
 export async function deleteTopic(topicId: string): Promise<void> {
   const { supabase, user } = await requireUser();
 
@@ -336,6 +404,7 @@ export async function addMentorExpert(
 
   revalidatePath(`/topics/${topicId}/experts`);
   revalidatePath(`/topics/${topicId}`);
+  redirect(`/topics/${topicId}/experts`);
 }
 
 export async function addAnalystExpert(
@@ -358,6 +427,7 @@ export async function addAnalystExpert(
 
   revalidatePath(`/topics/${topicId}/experts`);
   revalidatePath(`/topics/${topicId}`);
+  redirect(`/topics/${topicId}/experts`);
 }
 
 /** Analyst display name + specialization. */
@@ -454,6 +524,8 @@ export async function deleteExpert(expertId: string): Promise<void> {
   if (expert) {
     revalidatePath(`/topics/${expert.topic_id}/experts`);
     revalidatePath(`/topics/${expert.topic_id}`);
+    // Deleting happens on the expert's own page — leave it before it 404s.
+    redirect(`/topics/${expert.topic_id}/experts`);
   }
 }
 
