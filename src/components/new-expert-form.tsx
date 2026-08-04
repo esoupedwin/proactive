@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Bot, Landmark } from "lucide-react";
+import { Bot, Landmark, MessagesSquare } from "lucide-react";
 import { MarkdownTextarea } from "./markdown-textarea";
 import { SubmitButton } from "./submit-button";
 import { Field, Input, Select } from "./ui";
 
-type ExpertKindChoice = "mentor" | "analyst";
+type ExpertKindChoice = "mentor" | "analyst" | "sentiment";
 
 /**
  * Two-step add-expert flow: pick the expert type, then fill in its details.
@@ -16,19 +16,21 @@ type ExpertKindChoice = "mentor" | "analyst";
 export function NewExpertForm({
   topicId,
   mentorExists,
+  sentimentExists,
   addMentor,
   addAnalyst,
+  addSentiment,
 }: {
   topicId: string;
   /** Mentor is one-per-topic; an existing one disables the choice. */
   mentorExists: boolean;
+  /** Sentiment is one-per-topic too — it has no differentiating config. */
+  sentimentExists: boolean;
   addMentor: (formData: FormData) => Promise<void>;
   addAnalyst: (formData: FormData) => Promise<void>;
+  addSentiment: () => Promise<void>;
 }) {
-  const [kind, setKind] = useState<ExpertKindChoice | null>(
-    // Only one choice available → skip straight to its details.
-    mentorExists ? "analyst" : null,
-  );
+  const [kind, setKind] = useState<ExpertKindChoice | null>(null);
 
   return (
     <div className="space-y-6">
@@ -55,6 +57,18 @@ export function NewExpertForm({
             icon={<Landmark className="size-5" aria-hidden />}
             title="Analyst"
             description="An independent commentator that reads each report through a specialization you choose."
+          />
+          <TypeCard
+            selected={kind === "sentiment"}
+            disabled={sentimentExists}
+            onSelect={() => setKind("sentiment")}
+            icon={<MessagesSquare className="size-5" aria-hidden />}
+            title="Sentiment"
+            description={
+              sentimentExists
+                ? "Already on this topic — one Sentiment reader per topic."
+                : "Searches Reddit for public reaction to each report's main points and reads the mood."
+            }
           />
         </div>
       </fieldset>
@@ -117,6 +131,20 @@ export function NewExpertForm({
             />
           </Field>
           <SubmitButton pendingLabel="Adding Analyst…">Add Analyst</SubmitButton>
+        </form>
+      )}
+
+      {kind === "sentiment" && (
+        <form action={addSentiment} className="space-y-3 border-t border-rule pt-5">
+          <p className="text-sm leading-relaxed text-ink-soft">
+            Nothing to configure — after each report, the Sentiment reader
+            searches Reddit for reaction to its main points and adds a short
+            reading of the public mood below the briefing. Each run uses web
+            searches, shown in the run&apos;s cost line.
+          </p>
+          <SubmitButton pendingLabel="Adding Sentiment reader…">
+            Add Sentiment reader
+          </SubmitButton>
         </form>
       )}
 

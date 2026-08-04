@@ -2,7 +2,14 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { Bot, Check, Landmark, RefreshCw, RotateCcw } from "lucide-react";
+import {
+  Bot,
+  Check,
+  Landmark,
+  MessagesSquare,
+  RefreshCw,
+  RotateCcw,
+} from "lucide-react";
 import { mentorTipFeedback } from "@/lib/actions";
 import { formatTokens, formatUsdDetailed } from "@/lib/reports";
 import {
@@ -96,18 +103,26 @@ function ExpertCard({
           aria-hidden
           className="flex size-9 shrink-0 items-center justify-center rounded-full border border-rule bg-neutral-50"
         >
-          {isAnalyst ? <Landmark className="size-5" /> : <Bot className="size-5" />}
+          {expert.kind === "analyst" ? (
+            <Landmark className="size-5" />
+          ) : expert.kind === "sentiment" ? (
+            <MessagesSquare className="size-5" />
+          ) : (
+            <Bot className="size-5" />
+          )}
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-bold">{expert.name}</p>
           <p className="truncate text-xs text-ink-faint">
-            {isAnalyst
+            {expert.kind === "analyst"
               ? (expert.config.focus ?? "Neutral, evidence-based analysis")
-              : `${
-                  expert.config.teaching_focus === "entities"
-                    ? "Explains the people, organisations & their ties"
-                    : "Helps you understand key concepts"
-                } · ${expert.config.level ?? "basic"} level`}
+              : expert.kind === "sentiment"
+                ? "What Reddit makes of this report's main points"
+                : `${
+                    expert.config.teaching_focus === "entities"
+                      ? "Explains the people, organisations & their ties"
+                      : "Helps you understand key concepts"
+                  } · ${expert.config.level ?? "basic"} level`}
           </p>
         </div>
         {output && (
@@ -139,7 +154,19 @@ function ExpertCard({
           aria-busy={busy}
           className={busy ? "opacity-50 transition-opacity" : undefined}
         >
-          {isAnalyst ? (
+          {expert.kind === "sentiment" ? (
+            output.output.sentiment ? (
+              <div className="px-4 py-4">
+                <p className="whitespace-pre-wrap text-sm leading-relaxed">
+                  {output.output.sentiment.commentary}
+                </p>
+              </div>
+            ) : (
+              <p className="px-4 py-4 text-sm text-ink-faint">
+                No sentiment reading recorded for this report.
+              </p>
+            )
+          ) : isAnalyst ? (
             output.output.analysis ? (
               <AnalystBody analysis={output.output.analysis} />
             ) : (

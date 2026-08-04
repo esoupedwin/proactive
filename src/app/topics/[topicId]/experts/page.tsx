@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Bot, ChevronLeft, Landmark, Plus } from "lucide-react";
+import { Bot, ChevronLeft, Landmark, MessagesSquare, Plus } from "lucide-react";
 import { LinkPending } from "@/components/link-pending";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Expert, Topic } from "@/lib/types";
@@ -62,8 +62,9 @@ export default async function TopicExpertsPage({
 
       {experts.length === 0 ? (
         <p className="mt-6 rounded-md border border-rule bg-neutral-50 px-4 py-8 text-center text-sm text-ink-faint">
-          No experts yet. Add a Mentor to build your understanding, or an
-          Analyst for an independent read of each report.
+          No experts yet. Add a Mentor to build your understanding, an Analyst
+          for an independent read of each report, or a Sentiment reader for
+          the public mood on Reddit.
         </p>
       ) : (
         <ul className="mt-6 grid grid-cols-2 gap-4">
@@ -85,6 +86,13 @@ export default async function TopicExpertsPage({
 const KIND_TITLE: Record<Expert["kind"], string> = {
   mentor: "Mentor",
   analyst: "Analyst",
+  sentiment: "Sentiment",
+};
+
+const KIND_ICON: Record<Expert["kind"], React.ReactNode> = {
+  mentor: <Bot className="size-5" />,
+  analyst: <Landmark className="size-5" />,
+  sentiment: <MessagesSquare className="size-5" />,
 };
 
 /** One expert as a tappable summary card. */
@@ -117,11 +125,7 @@ function ExpertTile({ expert, topicId }: { expert: Expert; topicId: string }) {
             aria-hidden
             className="flex size-10 shrink-0 items-center justify-center rounded-full border border-rule bg-neutral-50"
           >
-            {isAnalyst ? (
-              <Landmark className="size-5" />
-            ) : (
-              <Bot className="size-5" />
-            )}
+            {KIND_ICON[expert.kind]}
           </span>
         </div>
 
@@ -138,6 +142,11 @@ function ExpertTile({ expert, topicId }: { expert: Expert; topicId: string }) {
                 : "Analyzes the topic broadly through an independent lens."}
             </p>
           </>
+        ) : expert.kind === "sentiment" ? (
+          <p className="mt-3 text-xs leading-relaxed text-ink-faint">
+            Searches Reddit for public reaction to each report&apos;s main
+            points and reads the prevailing mood.
+          </p>
         ) : (
           <>
             <p className="mt-3 text-xs leading-relaxed text-ink-faint">

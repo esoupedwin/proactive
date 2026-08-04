@@ -19,6 +19,7 @@ import {
   type AnalystPriorCommentary,
 } from "./analyst";
 import { runMentor } from "./mentor";
+import { runSentiment } from "./sentiment";
 
 /** Bound the analyst's per-run reading so cost stays predictable. */
 const ANALYST_MAX_NEW_EXTRACTS = 10;
@@ -162,6 +163,14 @@ export async function runExpertOnReport(options: {
       if (lastSeen) {
         newMemory = { ...memoryRow?.memory, extract_cursor: lastSeen };
       }
+      break;
+    }
+
+    case "sentiment": {
+      // Searches Reddit itself via the hosted web_search tool — needs only
+      // the report to know which points to check the public mood on.
+      const result = await runSentiment(llm, topic, report.sections);
+      output = { sentiment: result.sentiment };
       break;
     }
 

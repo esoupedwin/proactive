@@ -203,7 +203,7 @@ export interface Source {
 
 // ---- Experts ---------------------------------------------------------------
 
-export type ExpertKind = "mentor" | "analyst";
+export type ExpertKind = "mentor" | "analyst" | "sentiment";
 export type MentorLevel = "basic" | "intermediate" | "advanced";
 /** What Mentor teaches: general concepts, or the mentioned people/organisations and their relationships. */
 export type MentorFocus = "concepts" | "entities";
@@ -283,10 +283,16 @@ export function isAnalystCommentary(
   return typeof (analysis as AnalystCommentary).commentary === "string";
 }
 
+/** Sentiment expert: what Reddit makes of the report's main points. */
+export interface SentimentReading {
+  commentary: string;
+}
+
 /** Union payload — which fields are present depends on the expert kind. */
 export interface ExpertOutputData {
   tips?: MentorTip[];
   analysis?: AnalystAnalysis;
+  sentiment?: SentimentReading;
   /** OpenAI usage/cost of this expert's run (including later expansions). */
   usage?: ReportUsage;
 }

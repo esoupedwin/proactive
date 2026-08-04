@@ -3,7 +3,11 @@ import { notFound } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { LinkPending } from "@/components/link-pending";
 import { NewExpertForm } from "@/components/new-expert-form";
-import { addAnalystExpert, addMentorExpert } from "@/lib/actions";
+import {
+  addAnalystExpert,
+  addMentorExpert,
+  addSentimentExpert,
+} from "@/lib/actions";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Expert, Topic } from "@/lib/types";
 
@@ -25,12 +29,14 @@ export default async function NewExpertPage({
     .maybeSingle<Pick<Topic, "id" | "title">>();
   if (!topic) notFound();
 
-  const { data: mentorRow } = await supabase
+  const { data: singletonRows } = await supabase
     .from("experts")
-    .select("id")
+    .select("kind")
     .eq("topic_id", topicId)
-    .eq("kind", "mentor")
-    .maybeSingle<Pick<Expert, "id">>();
+    .in("kind", ["mentor", "sentiment"]);
+  const taken = new Set(
+    ((singletonRows ?? []) as Pick<Expert, "kind">[]).map((e) => e.kind),
+  );
 
   return (
     <main className="px-5 pb-16 pt-6">
@@ -52,9 +58,11 @@ export default async function NewExpertPage({
 
       <NewExpertForm
         topicId={topicId}
-        mentorExists={Boolean(mentorRow)}
+        mentorExists={taken.has("mentor")}
+        sentimentExists={taken.has("sentiment")}
         addMentor={addMentorExpert.bind(null, topicId)}
         addAnalyst={addAnalystExpert.bind(null, topicId)}
+        addSentiment={addSentimentExpert.bind(null, topicId)}
       />
     </main>
   );

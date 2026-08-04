@@ -1,6 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowRight, Bot, ChevronLeft, Landmark } from "lucide-react";
+import {
+  ArrowRight,
+  Bot,
+  ChevronLeft,
+  Landmark,
+  MessagesSquare,
+} from "lucide-react";
 import { LinkPending } from "@/components/link-pending";
 import { Markdown } from "@/components/markdown";
 import { MarkdownTextarea } from "@/components/markdown-textarea";
@@ -67,8 +73,10 @@ export default async function ExpertDetailPage({
             aria-hidden
             className="flex size-10 shrink-0 items-center justify-center rounded-full border border-rule bg-neutral-50"
           >
-            {isAnalyst ? (
+            {expert.kind === "analyst" ? (
               <Landmark className="size-5" />
+            ) : expert.kind === "sentiment" ? (
+              <MessagesSquare className="size-5" />
             ) : (
               <Bot className="size-5" />
             )}
@@ -78,9 +86,11 @@ export default async function ExpertDetailPage({
               {expert.name}
             </h1>
             <p className="text-xs text-ink-faint">
-              {isAnalyst
+              {expert.kind === "analyst"
                 ? "An independent read of each report through your chosen lens — short commentary that refines or challenges the briefing."
-                : "Explains key concepts, entities, and relationships in each report. Remembers what you already know."}
+                : expert.kind === "sentiment"
+                  ? "Searches Reddit for public reaction to each report's main points and reads the prevailing mood."
+                  : "Explains key concepts, entities, and relationships in each report. Remembers what you already know."}
             </p>
           </div>
           <Badge tone={expert.status === "active" ? "active" : "paused"}>
@@ -89,7 +99,13 @@ export default async function ExpertDetailPage({
         </div>
       </header>
 
-      {isAnalyst ? (
+      {expert.kind === "sentiment" ? (
+        <p className="rounded-md border border-rule bg-neutral-50 px-4 py-3 text-sm leading-relaxed text-ink-soft">
+          Nothing to configure. After each report, this expert runs up to 3
+          Reddit-focused web searches on the report&apos;s main points and adds
+          a short reading of the public mood below the briefing.
+        </p>
+      ) : isAnalyst ? (
         <form
           action={updateAnalystSettings.bind(null, expert.id)}
           className="space-y-3"
@@ -196,7 +212,9 @@ export default async function ExpertDetailPage({
               confirm={
                 isAnalyst
                   ? `Remove ${expert.name}? Its commentary on this topic's reports will be deleted too.`
-                  : "Remove Mentor? What it remembers teaching you for this topic will be deleted too."
+                  : expert.kind === "sentiment"
+                    ? `Remove ${expert.name}? Its sentiment readings on this topic's reports will be deleted too.`
+                    : "Remove Mentor? What it remembers teaching you for this topic will be deleted too."
               }
             >
               Remove {expert.name}
@@ -207,7 +225,9 @@ export default async function ExpertDetailPage({
           {expert.status === "active"
             ? isAnalyst
               ? `Removing ${expert.name} also deletes its commentary on this topic's reports.`
-              : "Removing Mentor also deletes what it remembers teaching you for this topic."
+              : expert.kind === "sentiment"
+                ? `Removing ${expert.name} also deletes its sentiment readings on this topic's reports.`
+                : "Removing Mentor also deletes what it remembers teaching you for this topic."
             : `While paused, ${expert.name} skips new reports and its section is hidden from the briefing.`}
         </p>
         <Link

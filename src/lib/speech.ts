@@ -198,6 +198,9 @@ export function buildSpeechScript(options: {
       parts.push(...analystLines(expert.name, output.output.analysis));
     } else if (expert.kind === "mentor" && output.output.tips?.length) {
       parts.push(...mentorLines(expert.name, output.output.tips));
+    } else if (expert.kind === "sentiment" && output.output.sentiment) {
+      const reading = sentence(output.output.sentiment.commentary);
+      parts.push(...section(`From ${expert.name}.`, reading ? [reading] : []));
     }
   }
 

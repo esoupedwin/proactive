@@ -430,6 +430,23 @@ export async function addAnalystExpert(
   redirect(`/topics/${topicId}/experts`);
 }
 
+export async function addSentimentExpert(topicId: string): Promise<void> {
+  const { supabase, user } = await requireUser();
+
+  await supabase.from("experts").insert({
+    topic_id: topicId,
+    user_id: user.id,
+    kind: "sentiment",
+    name: "Public Sentiment",
+    status: "active",
+    config: {},
+  });
+
+  revalidatePath(`/topics/${topicId}/experts`);
+  revalidatePath(`/topics/${topicId}`);
+  redirect(`/topics/${topicId}/experts`);
+}
+
 /** Analyst display name + specialization. */
 export async function updateAnalystSettings(
   expertId: string,
