@@ -131,6 +131,7 @@ export default async function ExpertDetailPage({
             <MarkdownTextarea
               id="focus"
               name="focus"
+              maxLength={4000}
               rows={10}
               defaultValue={expert.config.focus ?? ""}
               placeholder={"e.g. Malaysia's domestic politics, governance, power dynamics, and society\n\n## Use language such as\n- increases bargaining leverage\n- alters incentive structure"}

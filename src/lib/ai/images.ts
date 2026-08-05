@@ -50,8 +50,49 @@ export function extractImageMetaFromHtml(html: string): ImageMeta | null {
   };
 }
 
+/**
+ * SSRF guard for server-side page fetches. Page URLs come from extracts —
+ * i.e. from model output over third-party web content — so only public
+ * http(s) hosts may be fetched: no localhost, IP-literal private ranges, or
+ * non-web schemes. Hostname-based (does not resolve DNS), which blocks the
+ * plain attacks; defense in depth, not a perimeter.
+ */
+export function isFetchablePageUrl(pageUrl: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(pageUrl);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") return false;
+
+  const host = url.hostname.toLowerCase();
+  if (host === "localhost" || host.endsWith(".localhost")) return false;
+  if (host.endsWith(".local") || host.endsWith(".internal")) return false;
+  // IPv6 literals ([::1], [fc00::...], [fe80::...]) — block them wholesale;
+  // real articles live on hostnames.
+  if (host.startsWith("[") || host.includes(":")) return false;
+  // IPv4 literals: loopback, private, link-local, unspecified.
+  const ipv4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+  if (ipv4) {
+    const [a, b] = [Number(ipv4[1]), Number(ipv4[2])];
+    if (
+      a === 127 ||
+      a === 10 ||
+      a === 0 ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      (a === 169 && b === 254)
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /** Fetches a page and returns its social-preview image URL + description, or null. */
 export async function fetchOgImage(pageUrl: string): Promise<ImageMeta | null> {
+  if (!isFetchablePageUrl(pageUrl)) return null;
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);

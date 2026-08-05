@@ -372,6 +372,12 @@ function parseMentorFocus(value: FormDataEntryValue | null): MentorFocus {
 /** Long enough for "Prof. James Chin"; short enough to sit in a panel header. */
 const EXPERT_NAME_MAX = 60;
 
+/**
+ * The specialization is injected into EVERY analyst run on the report tier —
+ * an unbounded paste would silently multiply per-report token cost.
+ */
+const ANALYST_FOCUS_MAX = 4000;
+
 /** A display name for an expert; blank falls back to the kind's default. */
 function parseExpertName(
   value: FormDataEntryValue | null,
@@ -413,7 +419,9 @@ export async function addAnalystExpert(
 ): Promise<void> {
   const { supabase, user } = await requireUser();
 
-  const focus = String(formData.get("focus") ?? "").trim();
+  const focus = String(formData.get("focus") ?? "")
+    .trim()
+    .slice(0, ANALYST_FOCUS_MAX);
 
   await supabase.from("experts").insert({
     topic_id: topicId,
@@ -461,7 +469,9 @@ export async function updateAnalystSettings(
     .maybeSingle<Pick<Expert, "topic_id" | "config">>();
   if (!expert) return;
 
-  const focus = String(formData.get("focus") ?? "").trim();
+  const focus = String(formData.get("focus") ?? "")
+    .trim()
+    .slice(0, ANALYST_FOCUS_MAX);
   await supabase
     .from("experts")
     .update({

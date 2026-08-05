@@ -126,6 +126,7 @@ export function NewExpertForm({
             <MarkdownTextarea
               id="analyst_focus"
               name="focus"
+              maxLength={4000}
               rows={4}
               placeholder="e.g. Malaysia's domestic politics, governance, power dynamics, and society"
             />

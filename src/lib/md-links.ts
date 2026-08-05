@@ -25,6 +25,20 @@ export type MarkdownSegment = TextSegment | LinkSegment;
 const LINK_RE =
   /\(\s*\[([^\]]*)\]\(\s*([^()\s]+)\s*\)\s*\)|\[([^\]]*)\]\(\s*([^()\s]+)\s*\)/g;
 
+/**
+ * Only http(s) links may render as clickable. Model output is derived from
+ * third-party web content, so a crafted page could smuggle a javascript: or
+ * data: URL into a citation — those degrade to plain text instead.
+ */
+export function isSafeHttpUrl(url: string): boolean {
+  try {
+    const { protocol } = new URL(url);
+    return protocol === "https:" || protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
 /** Removes utm_* tracking params (e.g. utm_source=openai) from a link. */
 export function cleanLinkUrl(url: string): string {
   try {
@@ -57,11 +71,14 @@ export function splitMarkdownLinks(text: string): MarkdownSegment[] {
     const [full, wrappedLabel, wrappedUrl, bareLabel, bareUrl] = match;
     const before = text.slice(last, match.index);
     if (before) segments.push({ type: "text", text: before });
-    segments.push({
-      type: "link",
-      label: (wrappedLabel ?? bareLabel ?? "").trim(),
-      url: cleanLinkUrl((wrappedUrl ?? bareUrl ?? "").trim()),
-    });
+    const label = (wrappedLabel ?? bareLabel ?? "").trim();
+    const url = (wrappedUrl ?? bareUrl ?? "").trim();
+    if (isSafeHttpUrl(url)) {
+      segments.push({ type: "link", label, url: cleanLinkUrl(url) });
+    } else {
+      // Unsafe scheme: keep the label as prose, drop the target entirely.
+      segments.push({ type: "text", text: label });
+    }
     last = match.index + full.length;
   }
   const rest = text.slice(last);

@@ -44,6 +44,16 @@ describe("splitMarkdownLinks", () => {
     ]);
   });
 
+  it("degrades javascript:/data: links to plain text", () => {
+    const segments = splitMarkdownLinks(
+      "Click ([here](javascript:alert%281%29)) or ([this](data:text/html,x)).",
+    );
+    expect(segments.every((s) => s.type === "text")).toBe(true);
+    expect(segments.map((s) => (s.type === "text" ? s.text : "")).join("")).toBe(
+      "Click here or this.",
+    );
+  });
+
   it("strips utm_* tracking params from link urls", () => {
     const [, link] = splitMarkdownLinks(`x ([reddit.com](${THREAD}))`);
     expect(link).toMatchObject({

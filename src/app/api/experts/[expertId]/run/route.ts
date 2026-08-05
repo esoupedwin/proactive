@@ -49,6 +49,17 @@ export async function POST(
     return NextResponse.json({ error: "Topic not found" }, { status: 404 });
   }
 
+  // The report must belong to this expert's topic — otherwise an expert
+  // could be run (and its usage folded) against another topic's report.
+  const { data: report } = await supabase
+    .from("reports")
+    .select("topic_id")
+    .eq("id", body.reportId)
+    .maybeSingle<{ topic_id: string }>();
+  if (!report || report.topic_id !== expert.topic_id) {
+    return NextResponse.json({ error: "Report not found" }, { status: 404 });
+  }
+
   try {
     const usage = createUsageCollector();
     const output = await runExpertOnReport({

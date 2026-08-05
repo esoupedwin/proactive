@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   extractImageMetaFromHtml,
   findHeroImage,
+  isFetchablePageUrl,
   rankSourcesByCitation,
 } from "@/lib/ai/images";
 import type { Extract, ReportSections } from "@/lib/types";
@@ -175,5 +176,29 @@ describe("findHeroImage", () => {
     expect(
       await findHeroImage([], sections, async () => ({ url: "x", alt: null })),
     ).toBeNull();
+  });
+});
+
+describe("isFetchablePageUrl", () => {
+  it("allows public http(s) hosts", () => {
+    expect(isFetchablePageUrl("https://reuters.com/story")).toBe(true);
+    expect(isFetchablePageUrl("http://example.com/a")).toBe(true);
+  });
+
+  it("blocks non-web schemes and unparseable urls", () => {
+    expect(isFetchablePageUrl("file:///etc/passwd")).toBe(false);
+    expect(isFetchablePageUrl("ftp://example.com/x")).toBe(false);
+    expect(isFetchablePageUrl("not a url")).toBe(false);
+  });
+
+  it("blocks localhost, internal names, and private/link-local IPs", () => {
+    expect(isFetchablePageUrl("http://localhost:3000/api/cron")).toBe(false);
+    expect(isFetchablePageUrl("http://db.internal/admin")).toBe(false);
+    expect(isFetchablePageUrl("http://127.0.0.1/")).toBe(false);
+    expect(isFetchablePageUrl("http://10.1.2.3/")).toBe(false);
+    expect(isFetchablePageUrl("http://172.20.0.1/")).toBe(false);
+    expect(isFetchablePageUrl("http://192.168.1.1/")).toBe(false);
+    expect(isFetchablePageUrl("http://169.254.169.254/latest/meta-data")).toBe(false);
+    expect(isFetchablePageUrl("http://[::1]/")).toBe(false);
   });
 });
