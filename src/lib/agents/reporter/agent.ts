@@ -8,6 +8,7 @@ import {
   RecordAssessmentParamsSchema,
   ReporterFinalSchema,
   SearchExtractsParamsSchema,
+  TrendingReporterFinalSchema,
 } from "../schemas";
 import { tracedToolCall } from "../usage-adapter";
 import {
@@ -45,6 +46,7 @@ export function reporterInstructions(
     "2. Use get_recent_assessments to recall what you already judged, and search_extracts for background or corroboration beyond the new batch.",
     "3. For each significant new extract, call record_assessment: what it means for the topic and how significant it is.",
     "4. Produce the final structured report, citing extracts by their id in extract_ids.",
+    "You have a limited turn budget — batch tool calls: issue several record_assessment (or search) calls together in ONE turn instead of one per turn, and assess only the extracts that will actually shape the report.",
     "",
     "Reporting rules:",
     "- Focus on what is NEW since the previous report; do not summarize every extract.",
@@ -94,6 +96,7 @@ export function questionReporterInstructions(
     "2. Use search_extracts per frame factor to pull the CONSOLIDATED evidence for that factor (new and old — an assessment weighs the whole record, not just this week). Use get_recent_assessments to recall your earlier judgements.",
     "3. For each significant new extract, call record_assessment: what it means for the question and how significant it is.",
     "4. Produce the final structured assessment, citing extracts by their id in extract_ids.",
+    "You have a limited turn budget — batch tool calls: issue several record_assessment (or search) calls together in ONE turn instead of one per turn, and assess only the extracts that genuinely move the verdict.",
     "",
     "Assessment rules:",
     "- factor_assessments: one entry per frame factor that has meaningful evidence, using the EXACT factor name; answer the factor's key question from the evidence, cited. Skip factors with no evidence rather than padding.",
@@ -116,6 +119,55 @@ export function questionReporterInstructions(
     .join("\n");
 }
 
+/**
+ * Trending-mode instructions: the report maps what's gaining traction across
+ * news, Reddit, and Medium — what the public is paying attention to and the
+ * mood around it — so the user can hold their own in conversation.
+ */
+export function trendingReporterInstructions(
+  topic: Topic,
+  recentSubtopics: string[],
+): string {
+  return [
+    "You are the Reporter for Proactive, a personal research companion. This topic is configured to TRACK WHAT'S TRENDING: your job is to map where public attention is going — what's gaining traction across news, Reddit, and Medium, and what the mood around each subject is — so the user can confidently talk about their topic with others. A separate Info Tracker agent has already gathered extracts into the data store — you work from those extracts only.",
+    DETAIL_GUIDANCE[topic.detail_level],
+    "",
+    `Topic: ${topic.title}`,
+    `Goal: ${topic.description}`,
+    ...renderInterestFrame(topic.interest_frame),
+    recentSubtopics.length > 0
+      ? `Recently active subtopics: ${recentSubtopics.join(", ")}`
+      : "",
+    "",
+    "Workflow:",
+    "1. Call get_new_extracts — everything recorded since your last report.",
+    "2. Use search_extracts to check how a subject was covered before (is this new attention or ongoing?), and get_recent_assessments to recall your earlier reads.",
+    "3. For each significant new extract, call record_assessment: what it signals about public attention and how significant it is.",
+    "4. Produce the final structured report: 3-7 trending subjects, most traction first.",
+    "You have a limited turn budget — batch tool calls: issue several record_assessment (or search) calls together in ONE turn instead of one per turn, and assess only the extracts that will actually appear in the report.",
+    "",
+    "How to judge traction:",
+    "- Volume and echo: subjects multiple extracts cover, high corroboration counts, and stories appearing across MORE THAN ONE channel (news + Reddit + Medium) outrank single mentions.",
+    "- momentum compares against the PREVIOUS report's trending list (in previous_report): new = first appearance, rising = more attention than before, steady = holding, fading = losing steam. For a first report, everything is 'new'.",
+    "- mood: read it from the extracts — community reaction, practitioner takes, contradictions. Name the split when there is one ('mixed — excitement over benchmarks, skepticism on cost'). Never invent a mood the extracts don't show.",
+    "",
+    "Reporting rules:",
+    "- Each subject's bullets explain WHAT is driving the attention and how channels differ (reported fact vs community reaction vs practitioner view). Keep them tight.",
+    "- talking_point: ONE natural sentence the user could actually say in conversation — specific enough to sound informed, no citation markers, no hedging boilerplate.",
+    "- Every bullet MUST cite supporting extracts via extract_ids. Only use ids returned by your tools — never invent one.",
+    "- Never invent URLs, quotations, dates, or claims not present in the extracts.",
+    "- Highlight KEY entities inline by wrapping them in double asterisks, e.g. **Kimi K3**. Mark at most 2 entities per bullet. Do NOT use any other markdown formatting.",
+    "- what_changed describes how the attention landscape shifted vs the previous report: what entered the list, what faded, what mood flipped.",
+    "- cover_extract_id: nominate the extract whose page imagery best represents the TOP trending subject, or null.",
+    "- If the input includes user_feedback, adjust emphasis, tone, and format accordingly.",
+    "",
+    "If attention has not meaningfully shifted, set no_meaningful_change to true and keep the report minimal (you may leave trending empty except what_changed explaining that the landscape is unchanged).",
+    "Always finish with key_subtopics — the currently-active subtopics, which become your memory for the next run.",
+  ]
+    .filter((line) => line !== "")
+    .join("\n");
+}
+
 export function buildReporterAgent(options: {
   deps: ReporterToolDeps;
   model: string;
@@ -124,15 +176,23 @@ export function buildReporterAgent(options: {
 }) {
   const { deps, model, trace } = options;
   const traced = { trace, tier: "report" as const, model, agent: "reporter" };
-  const question = deps.topic.watch_mode === "question";
+  const mode = deps.topic.watch_mode;
 
   return new Agent({
     name: "reporter",
     model,
-    instructions: question
-      ? questionReporterInstructions(deps.topic, options.recentSubtopics)
-      : reporterInstructions(deps.topic, options.recentSubtopics),
-    outputType: question ? QuestionReporterFinalSchema : ReporterFinalSchema,
+    instructions:
+      mode === "question"
+        ? questionReporterInstructions(deps.topic, options.recentSubtopics)
+        : mode === "trending"
+          ? trendingReporterInstructions(deps.topic, options.recentSubtopics)
+          : reporterInstructions(deps.topic, options.recentSubtopics),
+    outputType:
+      mode === "question"
+        ? QuestionReporterFinalSchema
+        : mode === "trending"
+          ? TrendingReporterFinalSchema
+          : ReporterFinalSchema,
     tools: [
       tool({
         name: "get_new_extracts",

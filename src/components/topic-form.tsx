@@ -183,7 +183,7 @@ export function TopicForm({
         <Field
           label="How should Proactive watch this?"
           htmlFor="watch_mode"
-          info="Monitor keeps you up to date with a classic briefing. Answer a question makes every report an assessment: findings are weighed against the interest frame to answer your analytical question."
+          info="Monitor keeps you up to date with a classic briefing. Answer a question makes every report an assessment: findings are weighed against the interest frame to answer your analytical question. Track what's trending maps where public attention is going — what's gaining traction across news, Reddit, and Medium, the mood around it, and a talking point for each — so you can easily converse about the topic."
         >
           <Select
             id="watch_mode"
@@ -193,6 +193,7 @@ export function TopicForm({
           >
             <option value="monitor">Monitor developments</option>
             <option value="question">Answer a question</option>
+            <option value="trending">Track what&apos;s trending</option>
           </Select>
         </Field>
 

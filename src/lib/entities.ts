@@ -40,9 +40,13 @@ export function hasEntityMarkers(sections: ReportSections): boolean {
     ...sections.what_changed,
     ...(sections.verdict?.rationale ?? []),
     ...(sections.factor_assessments ?? []).flatMap((fa) => fa.bullets),
+    ...(sections.trending ?? []).flatMap((item) => item.bullets),
   ].map((b) => b.text);
   texts.push(...takeawayPoints(sections.cross_source_takeaway));
   if (sections.verdict) texts.push(sections.verdict.answer);
+  for (const item of sections.trending ?? []) {
+    texts.push(item.subject, item.mood, item.talking_point);
+  }
   return texts.some((t) => /\*\*[^*]+\*\*/.test(t));
 }
 

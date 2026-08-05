@@ -55,7 +55,7 @@ const topicInputSchema = z
       .array(interestFactorSchema)
       .min(1, "Add at least one factor to the interest frame.")
       .max(10, "Keep it to 10 factors or fewer."),
-    watch_mode: z.enum(["monitor", "question"]),
+    watch_mode: z.enum(["monitor", "question", "trending"]),
     analytical_question: z.string().trim().max(300),
     detail_level: z.enum(["brief", "standard", "deep"]),
     frequency: z.enum(["manual", "daily", "every_3_days", "weekly"]),

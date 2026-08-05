@@ -5,8 +5,11 @@ export type TopicStatus = "active" | "paused";
 export type UpdateFrequency = "manual" | "daily" | "every_3_days" | "weekly";
 export type ReportStatus = "generating" | "ready" | "error";
 export type SourceType = "news" | "reddit" | "medium";
-/** How Proactive watches a topic: classic briefing vs. answering a question. */
-export type WatchMode = "monitor" | "question";
+/**
+ * How Proactive watches a topic: classic briefing, answering an analytical
+ * question, or tracking what's trending (attention + public mood).
+ */
+export type WatchMode = "monitor" | "question" | "trending";
 
 /** One row of a topic's Interest Frame. */
 export interface InterestFactor {
@@ -100,6 +103,22 @@ export interface FactorAssessment {
   bullets: ReportBullet[];
 }
 
+/** How a trending subject's attention moved since the previous report. */
+export type TrendingMomentum = "new" | "rising" | "steady" | "fading";
+
+/** Trending mode: one subject the public is paying attention to. */
+export interface TrendingItem {
+  /** What's drawing attention, e.g. "Kimi K3". */
+  subject: string;
+  momentum: TrendingMomentum;
+  /** The public mood in a short phrase, e.g. "mixed — hype vs. cost doubts". */
+  mood: string;
+  /** What's driving the attention, cited. */
+  bullets: ReportBullet[];
+  /** One conversational line the user could say about it. */
+  talking_point: string;
+}
+
 /** Structured report body stored in reports.sections (jsonb). */
 export interface ReportSections {
   /** Optional cover image shown above Latest Developments. */
@@ -116,6 +135,8 @@ export interface ReportSections {
   verdict?: QuestionVerdict | null;
   /** Question mode only: per-factor assessments against the interest frame. */
   factor_assessments?: FactorAssessment[];
+  /** Trending mode only: what's gaining attention, most traction first. */
+  trending?: TrendingItem[];
 }
 
 /** Aggregated OpenAI usage for one generation run. */

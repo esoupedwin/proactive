@@ -11,6 +11,8 @@ import type {
   ReportSections,
   ScenarioLikelihood,
   Source,
+  TrendingItem,
+  TrendingMomentum,
   VerdictTrend,
 } from "@/lib/types";
 import { HeroImage } from "./hero-image";
@@ -64,6 +66,17 @@ export function ReportView({
         sources={sources}
         entities={entities}
         question={question}
+      />
+    );
+  }
+  // Trending-mode reports render as an attention map.
+  if (sections.trending) {
+    return (
+      <TrendingReportView
+        sections={sections}
+        items={sections.trending}
+        sources={sources}
+        entities={entities}
       />
     );
   }
@@ -176,6 +189,114 @@ const TREND_CLASS: Record<VerdictTrend, string> = {
   reversed: "border-red-300 bg-red-50 text-red-900",
   unchanged: "border-rule text-ink-soft",
 };
+
+const MOMENTUM_LABEL: Record<TrendingMomentum, string> = {
+  new: "New",
+  rising: "Rising",
+  steady: "Steady",
+  fading: "Fading",
+};
+
+const MOMENTUM_CLASS: Record<TrendingMomentum, string> = {
+  new: "border-sky-300 bg-sky-50 text-sky-900",
+  rising: "border-emerald-300 bg-emerald-50 text-emerald-900",
+  steady: "border-rule text-ink-soft",
+  fading: "border-amber-300 bg-amber-50 text-amber-900",
+};
+
+/** Trending-mode layout: what's gaining attention, one card per subject. */
+function TrendingReportView({
+  sections,
+  items,
+  sources,
+  entities,
+}: {
+  sections: ReportSections;
+  items: TrendingItem[];
+  sources: Source[];
+  entities: string[];
+}) {
+  const hero = sections.hero_image;
+  const heroSource =
+    hero && hero.source_ref >= 0 && hero.source_ref < sources.length
+      ? sources[hero.source_ref]!
+      : null;
+
+  return (
+    <div className="space-y-7">
+      {sections.no_meaningful_change && (
+        <p className="rounded-md border border-rule bg-neutral-50 px-4 py-3 text-sm leading-relaxed text-ink-soft">
+          Attention hasn&apos;t shifted meaningfully since the previous update.
+        </p>
+      )}
+
+      {hero && !sections.no_meaningful_change && (
+        <HeroImage
+          url={hero.url}
+          alt={hero.alt}
+          description={
+            hero.description ??
+            (heroSource ? `From “${heroSource.title}”` : null)
+          }
+          credit={heroSource ? (heroSource.publisher ?? heroSource.title) : null}
+          creditUrl={heroSource?.url ?? null}
+        />
+      )}
+
+      {items.map((item, index) => (
+        <section
+          key={index}
+          aria-label={item.subject}
+          className="rounded-md border border-rule px-4 py-4"
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-base font-bold tracking-tight">
+              <RichText text={item.subject} entities={entities} />
+            </h2>
+            <span
+              className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${MOMENTUM_CLASS[item.momentum]}`}
+            >
+              {MOMENTUM_LABEL[item.momentum]}
+            </span>
+          </div>
+          {item.mood && (
+            <p className="mt-1 text-sm text-ink-soft">
+              Mood: <RichText text={item.mood} entities={entities} />
+            </p>
+          )}
+          {item.bullets.length > 0 && (
+            <ul className="mt-3 space-y-2.5">
+              {item.bullets.map((bullet, i) => (
+                <li key={i} className="flex gap-2 text-[15px] leading-relaxed">
+                  <span aria-hidden className="select-none text-ink-faint">
+                    •
+                  </span>
+                  <span>
+                    <RichText text={bullet.text} entities={entities} />
+                    <SourceRefs refs={bullet.source_refs} sources={sources} />
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {item.talking_point && (
+            <p className="mt-3 rounded-md bg-neutral-50 px-3 py-2 text-sm leading-relaxed text-ink-soft">
+              <span className="font-semibold">Say this:</span>{" "}
+              <RichText text={item.talking_point} entities={entities} />
+            </p>
+          )}
+        </section>
+      ))}
+
+      <Section
+        title="What Changed"
+        bullets={sections.what_changed}
+        sources={sources}
+        entities={entities}
+      />
+    </div>
+  );
+}
 
 /** Question-mode layout: verdict, per-factor assessments, what changed. */
 function QuestionReportView({

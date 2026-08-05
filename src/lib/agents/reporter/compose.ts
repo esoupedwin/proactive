@@ -5,6 +5,7 @@ import type {
   QuestionReporterFinal,
   ReportDraft,
   ReporterFinal,
+  TrendingReporterFinal,
 } from "../schemas";
 
 /**
@@ -197,5 +198,68 @@ export function composeQuestionReport(
     summary: final.summary,
     snapshot: order.map((id) => extractsById.get(id)!),
     coverRef,
+  };
+}
+
+/**
+ * Trending-mode counterpart of composeReport: an attention map instead of
+ * the briefing sections. Same citation contract — cited extracts become the
+ * ordered sources snapshot; items left without cited evidence are dropped.
+ */
+export function composeTrendingReport(
+  final: TrendingReporterFinal,
+  extractsById: Map<string, ExtractRecord>,
+): ComposedReport {
+  const order: string[] = [];
+  const seen = new Set<string>();
+  const note = (id: string) => {
+    if (!seen.has(id) && extractsById.has(id)) {
+      seen.add(id);
+      order.push(id);
+    }
+  };
+  const noteBullets = (bullets: CitedBullet[]) =>
+    bullets.forEach((b) => b.extract_ids.forEach(note));
+  final.trending.forEach((item) => noteBullets(item.bullets));
+  noteBullets(final.what_changed);
+  if (final.cover_extract_id) note(final.cover_extract_id);
+
+  const indexOf = new Map(order.map((id, i) => [id, i]));
+  const sourceCount = order.length;
+  const toBullet = (b: CitedBullet): ReportBullet => ({
+    text: capEntityMarkers(b.text, 2),
+    source_refs: b.extract_ids
+      .filter((id) => indexOf.has(id))
+      .map((id) => indexOf.get(id)!),
+  });
+  const evidenceBullets = (bullets: CitedBullet[]) =>
+    bullets
+      .map(toBullet)
+      .filter((b) => b.source_refs.length > 0 || sourceCount === 0);
+
+  return {
+    sections: {
+      latest_developments: [],
+      community_reaction: [],
+      practitioner_view: [],
+      cross_source_takeaway: [],
+      what_changed: final.what_changed.map(toBullet),
+      no_meaningful_change: final.no_meaningful_change,
+      trending: final.trending
+        .map((item) => ({
+          subject: capEntityMarkers(item.subject, 2),
+          momentum: item.momentum,
+          mood: capEntityMarkers(item.mood, 2),
+          bullets: evidenceBullets(item.bullets),
+          talking_point: capEntityMarkers(item.talking_point, 2),
+        }))
+        .filter((item) => item.bullets.length > 0 || sourceCount === 0),
+    },
+    summary: final.summary,
+    snapshot: order.map((id) => extractsById.get(id)!),
+    coverRef:
+      final.cover_extract_id !== null
+        ? (indexOf.get(final.cover_extract_id) ?? null)
+        : null,
   };
 }

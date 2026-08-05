@@ -9,6 +9,7 @@ import {
   type MentorTip,
   type ReportSections,
   type ScenarioLikelihood,
+  type TrendingMomentum,
 } from "./types";
 
 /**
@@ -58,6 +59,13 @@ const LIKELIHOOD_PHRASE: Record<ScenarioLikelihood, string> = {
   likely: "Likely",
   possible: "Possible",
   unlikely: "Unlikely",
+};
+
+const MOMENTUM_PHRASE: Record<TrendingMomentum, string> = {
+  new: "newly trending",
+  rising: "gaining attention",
+  steady: "holding attention",
+  fading: "losing steam",
 };
 
 function mentorLines(name: string, tips: MentorTip[]): string[] {
@@ -141,11 +149,35 @@ export function buildSpeechScript(options: {
     parts.push(
       sections.verdict
         ? "Nothing new bears on this question since the previous update; the standing assessment follows."
-        : "Nothing significant has changed for this topic since the previous update.",
+        : sections.trending
+          ? "Attention hasn't shifted meaningfully since the previous update."
+          : "Nothing significant has changed for this topic since the previous update.",
     );
   }
 
-  if (sections.verdict) {
+  if (sections.trending) {
+    // Trending mode: each subject with its momentum, mood, and talking point.
+    for (const item of sections.trending) {
+      const subject = stripEntityMarkers(item.subject).trim();
+      if (!subject) continue;
+      const mood = stripEntityMarkers(item.mood).trim();
+      parts.push(
+        ...section(`${subject} — ${MOMENTUM_PHRASE[item.momentum]}.`, [
+          mood ? `The mood: ${mood}.` : "",
+          ...bulletsToProse(item.bullets),
+          item.talking_point
+            ? `You could say: ${sentence(item.talking_point)}`
+            : "",
+        ]),
+      );
+    }
+    parts.push(
+      ...section(
+        "Here's what changed since last time.",
+        bulletsToProse(sections.what_changed),
+      ),
+    );
+  } else if (sections.verdict) {
     // Question-mode assessment: verdict, factor evidence, what changed.
     const v = sections.verdict;
     parts.push(

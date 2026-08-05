@@ -177,6 +177,49 @@ export const QuestionReporterFinalSchema = z.object({
 });
 export type QuestionReporterFinal = z.infer<typeof QuestionReporterFinalSchema>;
 
+// Trending mode: the Reporter maps what's gaining traction across channels.
+
+export const TrendingItemDraftSchema = z.object({
+  subject: z
+    .string()
+    .describe("What's drawing attention — a model, event, product, person, claim"),
+  momentum: z
+    .enum(["new", "rising", "steady", "fading"])
+    .describe("Attention vs the previous report: new = first appearance on the list"),
+  mood: z
+    .string()
+    .describe("The public mood in one short phrase, e.g. 'mixed — hype over benchmarks, doubts on cost'"),
+  bullets: z
+    .array(CitedBulletSchema)
+    .describe("What's driving the attention and how channels differ, cited"),
+  talking_point: z
+    .string()
+    .describe("ONE natural conversational sentence the user could say to sound informed, e.g. 'Everyone's testing Kimi K3 this week — benchmarks look great but people are split on the pricing.'"),
+});
+
+export const TrendingReporterFinalSchema = z.object({
+  trending: z
+    .array(TrendingItemDraftSchema)
+    .max(7)
+    .describe("3-7 subjects the public is paying attention to, most traction first"),
+  what_changed: z
+    .array(CitedBulletSchema)
+    .describe("How the attention landscape shifted vs the previous report; may cite nothing when purely narrative"),
+  no_meaningful_change: z
+    .boolean()
+    .describe("True if attention has not meaningfully shifted since the previous report"),
+  summary: z.string().describe("One sentence summary of this update for the history list"),
+  cover_extract_id: z
+    .string()
+    .nullable()
+    .describe("Id of the ONE extract whose page imagery best represents the top trending subject; null when none fits"),
+  key_subtopics: z
+    .array(z.string())
+    .max(10)
+    .describe("The currently-active subtopics of this topic, most active first"),
+});
+export type TrendingReporterFinal = z.infer<typeof TrendingReporterFinalSchema>;
+
 export const ReporterFinalSchema = z.object({
   latest_developments: z.array(CitedBulletSchema),
   community_reaction: z.array(CitedBulletSchema),

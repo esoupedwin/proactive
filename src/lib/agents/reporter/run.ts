@@ -10,10 +10,18 @@ import {
 } from "../client";
 import type { ExtractStore } from "../extract-store";
 import type { ReporterPersistence } from "../report-store";
-import type { QuestionReporterFinal, ReporterFinal } from "../schemas";
+import type {
+  QuestionReporterFinal,
+  ReporterFinal,
+  TrendingReporterFinal,
+} from "../schemas";
 import { createTracingModelProvider } from "../usage-adapter";
 import { buildReporterAgent } from "./agent";
-import { composeQuestionReport, composeReport } from "./compose";
+import {
+  composeQuestionReport,
+  composeReport,
+  composeTrendingReport,
+} from "./compose";
 import type { ReporterToolDeps } from "./tools";
 
 export interface ReporterRunResult {
@@ -23,7 +31,11 @@ export interface ReporterRunResult {
   error?: string;
 }
 
-const DEFAULT_MAX_TURNS = 10;
+// A turn is one model invocation; a first report over a full extract store
+// legitimately needs many tool calls (searches + per-extract assessments).
+// The instructions tell the agent to batch tool calls, so this is headroom,
+// not an invitation to sprawl.
+const DEFAULT_MAX_TURNS = 20;
 
 /** Snapshot rows re-shaped for findHeroImage (pipeline Extract shape). */
 function asExtract(e: ExtractRecord): Extract {
@@ -104,11 +116,14 @@ export async function runReporter(options: {
     });
 
     const question = topic.watch_mode === "question";
+    const trending = topic.watch_mode === "trending";
     const input = JSON.stringify({
       now: startedAt,
       instruction: question
         ? "Assess the analytical question against the consolidated evidence. Start with get_new_extracts."
-        : "Bring the user up to date on this topic. Start with get_new_extracts.",
+        : trending
+          ? "Map what's currently gaining attention for this topic. Start with get_new_extracts."
+          : "Bring the user up to date on this topic. Start with get_new_extracts.",
       previous_report: previousReport?.sections ?? null,
       previous_report_date: previousReport?.created_at ?? null,
       // Question mode: the verdict the trend must be judged against.
@@ -143,15 +158,24 @@ export async function runReporter(options: {
     const final = result.finalOutput as
       | ReporterFinal
       | QuestionReporterFinal
+      | TrendingReporterFinal
       | undefined;
     if (!final) {
       throw new Error("reporter agent produced no final output");
     }
 
-    setStage(question ? "Weighing the evidence" : "Writing your briefing");
+    setStage(
+      question
+        ? "Weighing the evidence"
+        : trending
+          ? "Mapping the attention"
+          : "Writing your briefing",
+    );
     const composed = question
       ? composeQuestionReport(final as QuestionReporterFinal, deps.served)
-      : composeReport(final as ReporterFinal, deps.served);
+      : trending
+        ? composeTrendingReport(final as TrendingReporterFinal, deps.served)
+        : composeReport(final as ReporterFinal, deps.served);
     const sections = composed.sections;
 
     // Best-effort cover image — never fails the run.

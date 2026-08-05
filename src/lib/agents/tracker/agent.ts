@@ -49,6 +49,12 @@ export function trackerInstructions(
           "- Prioritise evidence that bears on the analytical question — findings that make its answer more or less likely.",
         ]
       : []),
+    ...(topic.watch_mode === "trending"
+      ? [
+          "- This topic tracks what's TRENDING: prioritise what's gaining attention — stories multiple outlets echo, Reddit threads with active discussion, subjects practitioners are suddenly writing about. Record the community reaction and mood, not just the facts.",
+          "- Traction must be measurable: when another outlet or thread covers an already-recorded story, use corroborate_extract (or record with novelty 'update') rather than skipping it — corroboration counts are the Reporter's attention signal.",
+        ]
+      : []),
     "- Use web search for factual news coverage. Use exa_search for semantic discovery — community discussion (Reddit), practitioner writing (Medium/blogs), and analysis that keyword search misses.",
     "- BEFORE recording, call search_existing_extracts to check whether the story is already in the store. If it is: skip it, or call corroborate_extract when a different outlet reports the same story, or record with novelty 'update' when there is a genuine new development.",
     "- Record one extract per distinct development or discussion via record_extract. Set source_type by where it lives: news site → news, reddit.com → reddit, medium.com or practitioner blogs → medium.",

@@ -2,8 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   composeQuestionReport,
   composeReport,
+  composeTrendingReport,
 } from "@/lib/agents/reporter/compose";
-import type { QuestionReporterFinal, ReporterFinal } from "@/lib/agents/schemas";
+import type {
+  QuestionReporterFinal,
+  ReporterFinal,
+  TrendingReporterFinal,
+} from "@/lib/agents/schemas";
 import type { ExtractRecord } from "@/lib/types";
 
 function extract(id: string, title = `Title ${id}`): ExtractRecord {
@@ -220,5 +225,96 @@ describe("composeQuestionReport", () => {
     );
     expect(result.coverRef).toBe(1);
     expect(result.sections.what_changed).toHaveLength(1);
+  });
+});
+
+function trendingFinal(
+  overrides: Partial<TrendingReporterFinal> = {},
+): TrendingReporterFinal {
+  return {
+    trending: [
+      {
+        subject: "Kimi K3",
+        momentum: "rising",
+        mood: "mixed — hype vs cost doubts",
+        bullets: [{ text: "Benchmarks lead the charts", extract_ids: ["a"] }],
+        talking_point: "Everyone's testing Kimi K3 this week.",
+      },
+    ],
+    what_changed: [],
+    no_meaningful_change: false,
+    summary: "sum",
+    cover_extract_id: null,
+    key_subtopics: [],
+    ...overrides,
+  };
+}
+
+describe("composeTrendingReport", () => {
+  it("builds trending items with positional refs and empty briefing sections", () => {
+    const result = composeTrendingReport(trendingFinal(), byId(["a"]));
+
+    expect(result.snapshot.map((e) => e.id)).toEqual(["a"]);
+    const item = result.sections.trending![0]!;
+    expect(item.subject).toBe("Kimi K3");
+    expect(item.momentum).toBe("rising");
+    expect(item.bullets[0]!.source_refs).toEqual([0]);
+    expect(result.sections.latest_developments).toHaveLength(0);
+  });
+
+  it("drops items whose evidence was entirely hallucinated", () => {
+    const result = composeTrendingReport(
+      trendingFinal({
+        trending: [
+          {
+            subject: "Ghost story",
+            momentum: "new",
+            mood: "n/a",
+            bullets: [{ text: "x", extract_ids: ["ghost"] }],
+            talking_point: "…",
+          },
+          {
+            subject: "Real story",
+            momentum: "new",
+            mood: "positive",
+            bullets: [{ text: "y", extract_ids: ["b"] }],
+            talking_point: "…",
+          },
+        ],
+      }),
+      byId(["b"]),
+    );
+    expect(result.sections.trending!.map((i) => i.subject)).toEqual([
+      "Real story",
+    ]);
+  });
+
+  it("maps the cover nominee into the snapshot", () => {
+    const result = composeTrendingReport(
+      trendingFinal({ cover_extract_id: "b" }),
+      byId(["a", "b"]),
+    );
+    expect(result.snapshot.map((e) => e.id)).toEqual(["a", "b"]);
+    expect(result.coverRef).toBe(1);
+  });
+
+  it("caps entity markers in subjects and talking points", () => {
+    const result = composeTrendingReport(
+      trendingFinal({
+        trending: [
+          {
+            subject: "**A** vs **B** vs **C**",
+            momentum: "steady",
+            mood: "calm",
+            bullets: [{ text: "z", extract_ids: ["a"] }],
+            talking_point: "**One** **Two** **Three** point.",
+          },
+        ],
+      }),
+      byId(["a"]),
+    );
+    const item = result.sections.trending![0]!;
+    expect(item.subject.match(/\*\*[^*]+\*\*/g)).toHaveLength(2);
+    expect(item.talking_point.match(/\*\*[^*]+\*\*/g)).toHaveLength(2);
   });
 });
