@@ -99,6 +99,12 @@ export async function runAnalyst(
       "- Test the report's assessment" +
         (sections.verdict ? " and its verdict" : "") +
         " against the full evidence: when uncited extracts strengthen, weaken, or complicate its conclusions, say so concretely. Corroborate when the evidence genuinely supports it — challenge is not contrarianism.",
+      // Question-mode reports carry a verdict; the analyst must take a
+      // position on it, not just orbit it. Monitor/trending topics get the
+      // softer general form.
+      sections.verdict
+        ? "- Say outright whether you agree with the report's verdict — its answer, likelihood, and confidence. If you dissent or would shade it, state your own reading and what in the evidence drives the difference."
+        : "- Make your own position clear: whether you broadly agree with the report's assessment, agree with reservations, or read the situation differently — and why.",
       "- Maintain continuity with your previous commentaries: build on them rather than restate them, and acknowledge openly when new evidence changes your view.",
       "- Focus on interpretation rather than description.",
       "",

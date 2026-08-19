@@ -33,6 +33,18 @@ const sections: ReportSections = {
   no_meaningful_change: false,
 };
 
+/** Question-mode sections: same report, but carrying a verdict. */
+const questionSections: ReportSections = {
+  ...sections,
+  verdict: {
+    answer: "The audit will likely be delayed past year end.",
+    likelihood: "likely",
+    confidence: "medium",
+    trend: "baseline",
+    rationale: [{ text: "Committee lost its quorum.", source_refs: [0] }],
+  },
+};
+
 const COMMENTARY =
   "  The reshuffle narrows oversight scope without changing formal mandates.  ";
 
@@ -157,6 +169,31 @@ describe("runAnalyst", () => {
     const instructions = captured().instructions;
     expect(instructions).toContain("cited_in_report");
     expect(instructions).toContain("previous_commentaries");
+  });
+
+  it("asks for an explicit position on the assessment on monitor topics", async () => {
+    const { llm, captured } = fakeLlm();
+    await runAnalyst(llm, topic, sections, "focus", sources);
+
+    const instructions = captured().instructions;
+    expect(instructions).toContain("Make your own position clear");
+    expect(instructions).not.toContain("agree with the report's verdict");
+  });
+
+  it("demands an outright agree/disagree on the verdict on question topics", async () => {
+    const { llm, captured } = fakeLlm();
+    await runAnalyst(llm, topic, questionSections, "focus", sources);
+
+    const instructions = captured().instructions;
+    expect(instructions).toContain(
+      "Say outright whether you agree with the report's verdict",
+    );
+    expect(instructions).not.toContain("Make your own position clear");
+    // The verdict itself reaches the analyst through the flattened report.
+    const input = JSON.parse(captured().input) as { report: string };
+    expect(input.report).toContain(
+      "Verdict: The audit will likely be delayed past year end.",
+    );
   });
 
   it("runs on the report tier — commentary quality is the product", async () => {
