@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { after } from "next/server";
 import { Activity, Bot, Coins, History, Layers, Pencil } from "lucide-react";
 import { AgentMemoryButton } from "@/components/agent-memory-button";
 import { BottomNav } from "@/components/bottom-nav";
@@ -35,6 +36,15 @@ import type {
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Everything the briefing needs from a report row. Never select `*` here:
+ * `trace` carries the full prompt/input log of every agent turn and can run
+ * to megabytes across five rows — the activity page fetches it on demand.
+ */
+const REPORT_COLUMNS =
+  "id, topic_id, user_id, status, sections, summary, stage, usage, error, created_at, completed_at";
+type BriefingReport = Omit<Report, "trace">;
+
 /** Topic briefing — the main screen: one topic's latest report. */
 export default async function TopicBriefingPage({
   params,
@@ -44,42 +54,59 @@ export default async function TopicBriefingPage({
   const { topicId } = await params;
   const supabase = await createSupabaseServerClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) notFound();
+  // Every read keys on topicId from the URL, so auth, the topic row, and all
+  // topic-scoped data fan out in a single round trip. RLS returns nothing to
+  // unauthenticated or foreign requests; the guards below turn that into 404.
+  const [
+    {
+      data: { user },
+    },
+    { data: topic },
+    { data: navTopics },
+    { data: latestReports },
+    { data: agentStates },
+    { data: memory },
+    { data: expertRows },
+  ] = await Promise.all([
+    supabase.auth.getUser(),
+    supabase.from("topics").select("*").eq("id", topicId).maybeSingle<Topic>(),
+    supabase
+      .from("topics")
+      .select("id, title")
+      .order("position")
+      .order("created_at"),
+    supabase
+      .from("reports")
+      .select(REPORT_COLUMNS)
+      .eq("topic_id", topicId)
+      .order("created_at", { ascending: false })
+      .limit(5),
+    supabase
+      .from("agent_state")
+      .select("agent, state")
+      .eq("topic_id", topicId),
+    supabase
+      .from("topic_memory")
+      .select("facts")
+      .eq("topic_id", topicId)
+      .maybeSingle<Pick<TopicMemory, "facts">>(),
+    supabase
+      .from("experts")
+      .select("*")
+      .eq("topic_id", topicId)
+      .eq("status", "active")
+      .order("created_at"),
+  ]);
+  if (!user || !topic) notFound();
 
-  const { data: topic } = await supabase
-    .from("topics")
-    .select("*")
-    .eq("id", topicId)
-    .maybeSingle<Topic>();
-  if (!topic) notFound();
-
-  // Remember for the post-login redirect.
-  await supabase
-    .from("profiles")
-    .update({ last_viewed_topic_id: topic.id })
-    .eq("id", user.id);
-
-  const [{ data: navTopics }, { data: latestReports }, { data: agentStates }] =
-    await Promise.all([
-      supabase
-        .from("topics")
-        .select("id, title")
-        .order("position")
-        .order("created_at"),
-      supabase
-        .from("reports")
-        .select("*")
-        .eq("topic_id", topic.id)
-        .order("created_at", { ascending: false })
-        .limit(5),
-      supabase
-        .from("agent_state")
-        .select("agent, state")
-        .eq("topic_id", topic.id),
-    ]);
+  // Remember for the post-login redirect — after the response is sent, so
+  // this write never delays the page.
+  after(() =>
+    supabase
+      .from("profiles")
+      .update({ last_viewed_topic_id: topic.id })
+      .eq("id", user.id),
+  );
 
   const stateRows = (agentStates ?? []) as {
     agent: string;
@@ -90,7 +117,7 @@ export default async function TopicBriefingPage({
   const reporterMemory =
     stateRows.find((row) => row.agent === "reporter")?.state ?? null;
 
-  const reports = (latestReports ?? []) as Report[];
+  const reports = (latestReports ?? []) as BriefingReport[];
   const readyReport = reports.find((r) => r.status === "ready") ?? null;
   const newest = reports[0] ?? null;
   const generating =
@@ -102,28 +129,14 @@ export default async function TopicBriefingPage({
   let expertItems: ExpertPanelItem[] = [];
   let feedback: Pick<ReportFeedbackRow, "rating" | "comment"> | null = null;
   if (readyReport) {
-    const [
-      { data },
-      { data: memory },
-      { data: expertRows },
-      { data: outputRows },
-      { data: feedbackRow },
-    ] = await Promise.all([
+    // Only these are keyed by the ready report's id, so only these wait for
+    // the first round trip.
+    const [{ data }, { data: outputRows }, { data: feedbackRow }] =
+      await Promise.all([
         supabase
           .from("sources")
           .select("*")
           .eq("report_id", readyReport.id)
-          .order("created_at"),
-        supabase
-          .from("topic_memory")
-          .select("facts")
-          .eq("topic_id", topic.id)
-          .maybeSingle<Pick<TopicMemory, "facts">>(),
-        supabase
-          .from("experts")
-          .select("*")
-          .eq("topic_id", topic.id)
-          .eq("status", "active")
           .order("created_at"),
         supabase
           .from("expert_outputs")

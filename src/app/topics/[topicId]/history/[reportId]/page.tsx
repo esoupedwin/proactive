@@ -20,29 +20,34 @@ export default async function ReportDetailPage({
   const { topicId, reportId } = await params;
   const supabase = await createSupabaseServerClient();
 
-  const [{ data: topic }, { data: report }] = await Promise.all([
-    supabase.from("topics").select("*").eq("id", topicId).maybeSingle<Topic>(),
-    supabase
-      .from("reports")
-      .select("*")
-      .eq("id", reportId)
-      .eq("topic_id", topicId)
-      .maybeSingle<Report>(),
-  ]);
+  // Everything keys on the URL params, so it all fans out in one round trip.
+  // Never select `*` from reports here — `trace` is huge and unrendered.
+  const [{ data: topic }, { data: report }, { data }, { data: memory }] =
+    await Promise.all([
+      supabase
+        .from("topics")
+        .select("*")
+        .eq("id", topicId)
+        .maybeSingle<Topic>(),
+      supabase
+        .from("reports")
+        .select("id, sections, created_at")
+        .eq("id", reportId)
+        .eq("topic_id", topicId)
+        .maybeSingle<Pick<Report, "id" | "sections" | "created_at">>(),
+      supabase
+        .from("sources")
+        .select("*")
+        .eq("report_id", reportId)
+        .order("created_at"),
+      supabase
+        .from("topic_memory")
+        .select("facts")
+        .eq("topic_id", topicId)
+        .maybeSingle<Pick<TopicMemory, "facts">>(),
+    ]);
   if (!topic || !report || !report.sections) notFound();
 
-  const [{ data }, { data: memory }] = await Promise.all([
-    supabase
-      .from("sources")
-      .select("*")
-      .eq("report_id", report.id)
-      .order("created_at"),
-    supabase
-      .from("topic_memory")
-      .select("facts")
-      .eq("topic_id", topicId)
-      .maybeSingle<Pick<TopicMemory, "facts">>(),
-  ]);
   const sources = (data ?? []) as Source[];
   const fallbackEntities = keyEntitiesFromMemory(memory?.facts ?? []);
 

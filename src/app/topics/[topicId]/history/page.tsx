@@ -18,20 +18,22 @@ export default async function ReportHistoryPage({
   const { topicId } = await params;
   const supabase = await createSupabaseServerClient();
 
-  const { data: topic } = await supabase
-    .from("topics")
-    .select("*")
-    .eq("id", topicId)
-    .maybeSingle<Topic>();
+  // One round trip; the list needs only the summary line per report — never
+  // `sections` or the megabyte-scale `trace`.
+  const [{ data: topic }, { data }] = await Promise.all([
+    supabase.from("topics").select("*").eq("id", topicId).maybeSingle<Topic>(),
+    supabase
+      .from("reports")
+      .select("id, status, summary, usage, error, created_at")
+      .eq("topic_id", topicId)
+      .neq("status", "generating")
+      .order("created_at", { ascending: false }),
+  ]);
   if (!topic) notFound();
-
-  const { data } = await supabase
-    .from("reports")
-    .select("*")
-    .eq("topic_id", topicId)
-    .neq("status", "generating")
-    .order("created_at", { ascending: false });
-  const reports = (data ?? []) as Report[];
+  const reports = (data ?? []) as Pick<
+    Report,
+    "id" | "status" | "summary" | "usage" | "error" | "created_at"
+  >[];
 
   return (
     <main className="px-5 pb-16 pt-6">
