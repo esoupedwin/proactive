@@ -418,7 +418,7 @@ function LegacyAnalystBody({ analysis }: { analysis: LegacyAnalystAnalysis }) {
 }
 
 const TREND_LABEL: Record<StanceTrend, string | null> = {
-  baseline: "baseline",
+  baseline: null, // the "First look" banner already says it
   new: "new",
   shifted: "shifted",
   unchanged: null, // no badge — stability is the quiet default
