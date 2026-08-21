@@ -81,8 +81,9 @@ Vercel cron) or on demand, against an already-created `reports` row.
   is deterministic), and ids become `source_refs` indexes. `sanitizeDraft`
   still drops hallucinated refs and caps `**entity**` markers.
 - After completion the run advances the cursor, saves subtopic memory, and
-  the route runs the **experts** (Mentor/Analyst) unchanged — they read
-  `reports.sections` and the per-report `sources` snapshot.
+  the route runs the **experts** (Mentor/Analyst/Sentiment/Personality)
+  unchanged — they read `reports.sections` and the per-report `sources`
+  snapshot.
 
 ## Scheduling (fully decoupled)
 
@@ -161,7 +162,7 @@ pipeline, schemas.
 | Tier | Env var | Default | Used by |
 | --- | --- | --- | --- |
 | Search | `OPENAI_SEARCH_MODEL` | `gpt-5-mini` | Info Tracker, experts' mechanical calls |
-| Report | `OPENAI_REPORT_MODEL` | `gpt-5` | Reporter, Analyst |
+| Report | `OPENAI_REPORT_MODEL` | `gpt-5` | Reporter, Analyst, Personality stance updates |
 | Embedding | `OPENAI_EMBEDDING_MODEL` | `text-embedding-3-small` | extract/query embeddings |
 
 Usage (tokens, web-search calls, embeddings) is recorded per report to

@@ -19,11 +19,25 @@ import {
   type AnalystPriorCommentary,
 } from "./analyst";
 import { runMentor } from "./mentor";
+import {
+  attachWikiImages,
+  baselineRoster,
+  mergeProfiledNames,
+  mergeStanceUpdates,
+  profilesForOutput,
+  runPersonalityBaseline,
+  runPersonalityProfiles,
+  runPersonalityUpdate,
+  stancesForOutput,
+  type PersonalityExtractSummary,
+} from "./personality";
 import { runSentiment } from "./sentiment";
 
 /** Bound the analyst's per-run reading so cost stays predictable. */
 const ANALYST_MAX_NEW_EXTRACTS = 10;
 const ANALYST_PRIOR_COMMENTARIES = 3;
+/** Bound the personality tracker's per-run reading likewise. */
+const PERSONALITY_MAX_NEW_EXTRACTS = 15;
 
 /**
  * Runs an expert against one report and persists its output + memory.
@@ -163,6 +177,103 @@ export async function runExpertOnReport(options: {
       if (lastSeen) {
         newMemory = { ...memoryRow?.memory, extract_cursor: lastSeen };
       }
+      break;
+    }
+
+    case "personality": {
+      const mode = expert.config.personality_mode ?? "stance";
+      const memory = memoryRow?.memory ?? {};
+
+      if (mode === "profiles") {
+        const result = await runPersonalityProfiles(
+          llm,
+          topic,
+          report.sections,
+          memory.profiled ?? [],
+        );
+        const profiles = await attachWikiImages(
+          profilesForOutput(result.profiles),
+        );
+        output = { personality: { mode, profiles } };
+        if (result.profiles.length > 0) {
+          newMemory = {
+            ...memory,
+            profiled: mergeProfiledNames(memory, result.profiles),
+          };
+        }
+        break;
+      }
+
+      // Stance mode. The tracked issue falls back to the topic's own question.
+      const issue =
+        expert.config.issue?.trim() ||
+        topic.analytical_question?.trim() ||
+        `${topic.title} — ${topic.description}`;
+      const roster = memory.personalities ?? [];
+      const now = new Date().toISOString();
+
+      if (roster.length === 0) {
+        // First run: scan the web for the key players and store the baseline.
+        const { players } = await runPersonalityBaseline(llm, topic, issue);
+        const baseline = await attachWikiImages(baselineRoster(players, now));
+        output = {
+          personality: {
+            mode,
+            issue,
+            baseline: true,
+            stances: stancesForOutput(baseline, null),
+          },
+        };
+        newMemory = { ...memory, personalities: baseline };
+        break;
+      }
+
+      // Later runs: test each stance against the report and the raw record
+      // since the last review.
+      const cursor = memory.extract_cursor;
+      let extractQuery = supabase
+        .from("extracts")
+        .select("source_type, title, published_at, gist, created_at")
+        .eq("topic_id", topic.id)
+        .order("created_at", { ascending: false })
+        .limit(PERSONALITY_MAX_NEW_EXTRACTS);
+      if (cursor) extractQuery = extractQuery.gt("created_at", cursor);
+      const { data: extractRows } = await extractQuery;
+      const newRows = (
+        (extractRows ?? []) as Pick<
+          ExtractRecord,
+          "source_type" | "title" | "published_at" | "gist" | "created_at"
+        >[]
+      ).reverse();
+      const newExtracts: PersonalityExtractSummary[] = newRows.map((e) => ({
+        source_type: e.source_type,
+        title: e.title,
+        published_at: e.published_at,
+        gist: e.gist,
+        recorded_at: e.created_at,
+      }));
+
+      const { updates } = await runPersonalityUpdate(
+        llm,
+        topic,
+        report.sections,
+        issue,
+        roster,
+        newExtracts,
+      );
+      // New players may have joined the roster — give them portraits too.
+      const merged = await attachWikiImages(
+        mergeStanceUpdates(roster, updates, now),
+      );
+      output = {
+        personality: { mode, issue, stances: stancesForOutput(merged, updates) },
+      };
+      const lastSeen = newRows[newRows.length - 1]?.created_at;
+      newMemory = {
+        ...memory,
+        personalities: merged,
+        ...(lastSeen ? { extract_cursor: lastSeen } : {}),
+      };
       break;
     }
 

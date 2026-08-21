@@ -6,6 +6,7 @@ import { NewExpertForm } from "@/components/new-expert-form";
 import {
   addAnalystExpert,
   addMentorExpert,
+  addPersonalityExpert,
   addSentimentExpert,
 } from "@/lib/actions";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -63,6 +64,7 @@ export default async function NewExpertPage({
         addMentor={addMentorExpert.bind(null, topicId)}
         addAnalyst={addAnalystExpert.bind(null, topicId)}
         addSentiment={addSentimentExpert.bind(null, topicId)}
+        addPersonality={addPersonalityExpert.bind(null, topicId)}
       />
     </main>
   );

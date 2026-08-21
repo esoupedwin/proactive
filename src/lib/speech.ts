@@ -7,6 +7,7 @@ import {
   type Expert,
   type ExpertOutput,
   type MentorTip,
+  type PersonalityOutput,
   type ReportSections,
   type ScenarioLikelihood,
   type TrendingMomentum,
@@ -126,6 +127,45 @@ function analystLines(name: string, analysis: AnalystAnalysis): string[] {
   return section(`From ${name}.`, lines);
 }
 
+function personalityLines(
+  name: string,
+  personality: PersonalityOutput,
+): string[] {
+  if (personality.mode === "profiles") {
+    const lines = (personality.profiles ?? []).flatMap((p) => {
+      const person = stripEntityMarkers(p.name).trim();
+      // Citation links are for the eye; spoken, they are just noise.
+      const who = sentence(stripMarkdownLinks(p.who));
+      if (!person || !who) return [];
+      const relevance = sentence(stripMarkdownLinks(p.relevance));
+      return [`${person}. ${who}${relevance ? ` ${relevance}` : ""}`];
+    });
+    return section(`From ${name}.`, lines);
+  }
+
+  const issue = personality.issue
+    ? sentence(`On the question: ${personality.issue}`)
+    : "";
+  const lines = (personality.stances ?? []).flatMap((s) => {
+    const person = stripEntityMarkers(s.name).trim();
+    // Citation links are for the eye; spoken, they are just noise.
+    const stance = sentence(stripMarkdownLinks(s.stance));
+    if (!person || !stance) return [];
+    // Spoken, only movement is worth announcing; the roster reads flat.
+    const shift =
+      s.trend === "shifted" && s.change_note
+        ? ` Position shifted: ${sentence(stripMarkdownLinks(s.change_note))}`
+        : s.trend === "new"
+          ? " Newly tracked."
+          : "";
+    return [`${person}. ${stance}${shift}`];
+  });
+  return section(
+    `From ${name}.`,
+    lines.length > 0 ? [issue, ...lines].filter(Boolean) : [],
+  );
+}
+
 /**
  * Renders the topic's current briefing — report plus every expert's output —
  * as a continuous spoken script.
@@ -231,6 +271,8 @@ export function buildSpeechScript(options: {
       parts.push(...analystLines(expert.name, output.output.analysis));
     } else if (expert.kind === "mentor" && output.output.tips?.length) {
       parts.push(...mentorLines(expert.name, output.output.tips));
+    } else if (expert.kind === "personality" && output.output.personality) {
+      parts.push(...personalityLines(expert.name, output.output.personality));
     } else if (expert.kind === "sentiment" && output.output.sentiment) {
       // Citation links are for the eye; spoken, they are just noise.
       const s = output.output.sentiment;

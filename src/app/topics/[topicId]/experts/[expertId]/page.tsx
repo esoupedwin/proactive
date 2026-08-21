@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   Landmark,
   MessagesSquare,
+  Users,
 } from "lucide-react";
 import { LinkPending } from "@/components/link-pending";
 import { Markdown } from "@/components/markdown";
@@ -17,6 +18,7 @@ import {
   toggleExpertStatus,
   updateAnalystSettings,
   updateMentorSettings,
+  updatePersonalitySettings,
 } from "@/lib/actions";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Expert } from "@/lib/types";
@@ -77,6 +79,8 @@ export default async function ExpertDetailPage({
               <Landmark className="size-5" />
             ) : expert.kind === "sentiment" ? (
               <MessagesSquare className="size-5" />
+            ) : expert.kind === "personality" ? (
+              <Users className="size-5" />
             ) : (
               <Bot className="size-5" />
             )}
@@ -90,7 +94,11 @@ export default async function ExpertDetailPage({
                 ? "An independent read of each report through your chosen lens — short commentary that refines or challenges the briefing."
                 : expert.kind === "sentiment"
                   ? "Searches Reddit for public reaction to each report's main points and reads the prevailing mood."
-                  : "Explains key concepts, entities, and relationships in each report. Remembers what you already know."}
+                  : expert.kind === "personality"
+                    ? expert.config.personality_mode === "profiles"
+                      ? "Profiles the people mentioned in each report — who they are, their affiliations, and what they did — fact-checked via web search."
+                      : "Tracks the key players on one issue: a web-scanned baseline of who they are and where they stand, then how each stance moves over time."
+                    : "Explains key concepts, entities, and relationships in each report. Remembers what you already know."}
             </p>
           </div>
           <Badge tone={expert.status === "active" ? "active" : "paused"}>
@@ -105,6 +113,49 @@ export default async function ExpertDetailPage({
           Reddit-focused web searches on the report&apos;s main points and adds
           a short reading of the public mood below the briefing.
         </p>
+      ) : expert.kind === "personality" ? (
+        <form
+          action={updatePersonalitySettings.bind(null, expert.id)}
+          className="space-y-3"
+        >
+          <Field
+            label="Name"
+            htmlFor="personality_name"
+            hint="What this expert is called on the briefing. Leave empty for “Personality”."
+          >
+            <Input
+              id="personality_name"
+              name="name"
+              maxLength={60}
+              defaultValue={expert.name}
+              placeholder="e.g. Key Players"
+            />
+          </Field>
+          {expert.config.personality_mode === "profiles" ? (
+            <p className="rounded-md border border-rule bg-neutral-50 px-4 py-3 text-sm leading-relaxed text-ink-soft">
+              This expert profiles the people mentioned in each report and
+              remembers who it already covered — nothing else to configure.
+            </p>
+          ) : (
+            <Field
+              label="Issue to track"
+              htmlFor="personality_issue"
+              hint="The issue stances are tracked against. Leave empty to track the topic's own question. Changing it mid-way keeps the roster but re-reads every stance against the new issue."
+            >
+              <MarkdownTextarea
+                id="personality_issue"
+                name="issue"
+                maxLength={1000}
+                rows={3}
+                defaultValue={expert.config.issue ?? ""}
+                placeholder="e.g. Will UMNO leave the Unity Government?"
+              />
+            </Field>
+          )}
+          <SubmitButton variant="outline" pendingLabel="Saving…">
+            Save Personality
+          </SubmitButton>
+        </form>
       ) : isAnalyst ? (
         <form
           action={updateAnalystSettings.bind(null, expert.id)}
@@ -215,7 +266,9 @@ export default async function ExpertDetailPage({
                   ? `Remove ${expert.name}? Its commentary on this topic's reports will be deleted too.`
                   : expert.kind === "sentiment"
                     ? `Remove ${expert.name}? Its sentiment readings on this topic's reports will be deleted too.`
-                    : "Remove Mentor? What it remembers teaching you for this topic will be deleted too."
+                    : expert.kind === "personality"
+                      ? `Remove ${expert.name}? Its tracked people and stance history for this topic will be deleted too.`
+                      : "Remove Mentor? What it remembers teaching you for this topic will be deleted too."
               }
             >
               Remove {expert.name}
@@ -228,7 +281,9 @@ export default async function ExpertDetailPage({
               ? `Removing ${expert.name} also deletes its commentary on this topic's reports.`
               : expert.kind === "sentiment"
                 ? `Removing ${expert.name} also deletes its sentiment readings on this topic's reports.`
-                : "Removing Mentor also deletes what it remembers teaching you for this topic."
+                : expert.kind === "personality"
+                  ? `Removing ${expert.name} also deletes its tracked people and their stance history for this topic.`
+                  : "Removing Mentor also deletes what it remembers teaching you for this topic."
             : `While paused, ${expert.name} skips new reports and its section is hidden from the briefing.`}
         </p>
         <Link

@@ -224,10 +224,15 @@ export interface Source {
 
 // ---- Experts ---------------------------------------------------------------
 
-export type ExpertKind = "mentor" | "analyst" | "sentiment";
+export type ExpertKind = "mentor" | "analyst" | "sentiment" | "personality";
 export type MentorLevel = "basic" | "intermediate" | "advanced";
 /** What Mentor teaches: general concepts, or the mentioned people/organisations and their relationships. */
 export type MentorFocus = "concepts" | "entities";
+/**
+ * What Personality does: track key players' stances on an issue over time,
+ * or profile the people mentioned in each report.
+ */
+export type PersonalityMode = "stance" | "profiles";
 
 export interface ExpertConfig {
   /** Mentor: how basic or advanced explanations should be. */
@@ -236,6 +241,10 @@ export interface ExpertConfig {
   teaching_focus?: MentorFocus;
   /** Analyst: its specialization, e.g. "Malaysia's domestic politics, governance, power dynamics, and society". */
   focus?: string;
+  /** Personality: which mode this expert runs in. */
+  personality_mode?: PersonalityMode;
+  /** Personality (stance): the issue stances are tracked against, e.g. "Will UMNO leave the Unity Government?". */
+  issue?: string;
 }
 
 /** An LLM module attached to a topic that reads reports and adds output. */
@@ -312,11 +321,53 @@ export interface SentimentReading {
   commentary?: string;
 }
 
+/** How a tracked personality's stance moved since the previous review. */
+export type StanceTrend = "baseline" | "new" | "unchanged" | "shifted";
+
+/** One key player's stance on the tracked issue, as shown on a report. */
+export interface PersonalityStance {
+  name: string;
+  /** Role and influence: why this person's position moves the issue. */
+  why_matters: string;
+  /** Their current position on the tracked issue, 1-2 sentences. */
+  stance: string;
+  trend: StanceTrend;
+  /** What changed and on what evidence; set when trend is 'shifted' or 'new'. */
+  change_note?: string | null;
+  /** Portrait from the person's Wikipedia page — never model-supplied. */
+  image_url?: string | null;
+  image_page_url?: string | null;
+}
+
+/** One profiled person from a report (profiles mode). */
+export interface PersonalityProfile {
+  name: string;
+  /** Who they are: role, affiliation chain, background. */
+  who: string;
+  /** What they said or did in THIS report and why it matters. */
+  relevance: string;
+  image_url?: string | null;
+  image_page_url?: string | null;
+}
+
+/** Personality expert output — which fields are present depends on the mode. */
+export interface PersonalityOutput {
+  mode: PersonalityMode;
+  /** Stance mode: the issue the roster is tracked against. */
+  issue?: string;
+  /** Stance mode: true on the first run, when the roster came from a web scan. */
+  baseline?: boolean;
+  stances?: PersonalityStance[];
+  /** Profiles mode. */
+  profiles?: PersonalityProfile[];
+}
+
 /** Union payload — which fields are present depends on the expert kind. */
 export interface ExpertOutputData {
   tips?: MentorTip[];
   analysis?: AnalystAnalysis;
   sentiment?: SentimentReading;
+  personality?: PersonalityOutput;
   /** OpenAI usage/cost of this expert's run (including later expansions). */
   usage?: ReportUsage;
 }
@@ -358,12 +409,35 @@ export interface TrackedScenario {
 }
 
 
+/** One stance revision in a tracked personality's history. */
+export interface StanceRevision {
+  at: string;
+  stance: string;
+  note?: string | null;
+}
+
+/** Personality (stance mode): one person on the tracked roster. */
+export interface TrackedPersonality {
+  name: string;
+  why_matters: string;
+  stance: string;
+  /** Every stance this person has held, oldest first — the track record. */
+  history: StanceRevision[];
+  updated_at: string;
+  image_url?: string | null;
+  image_page_url?: string | null;
+}
+
 /** Union payload — which fields are present depends on the expert kind. */
 export interface ExpertMemoryData {
   taught?: TaughtConcept[];
   scenarios?: TrackedScenario[];
-  /** Analyst: max extracts.created_at it has reviewed (its reading cursor). */
+  /** Analyst/Personality: max extracts.created_at reviewed (reading cursor). */
   extract_cursor?: string;
+  /** Personality (stance): the tracked roster with stance history. */
+  personalities?: TrackedPersonality[];
+  /** Personality (profiles): names already profiled, most recent last. */
+  profiled?: string[];
 }
 
 export interface ExpertMemory {

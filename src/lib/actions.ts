@@ -19,6 +19,7 @@ import type {
   MentorFocus,
   MentorLevel,
   MentorMemoryData,
+  PersonalityMode,
   Report,
   Topic,
 } from "./types";
@@ -453,6 +454,91 @@ export async function addSentimentExpert(topicId: string): Promise<void> {
   revalidatePath(`/topics/${topicId}/experts`);
   revalidatePath(`/topics/${topicId}`);
   redirect(`/topics/${topicId}/experts`);
+}
+
+const PERSONALITY_MODES: PersonalityMode[] = ["stance", "profiles"];
+
+function parsePersonalityMode(
+  value: FormDataEntryValue | null,
+): PersonalityMode {
+  const mode = String(value ?? "stance") as PersonalityMode;
+  return PERSONALITY_MODES.includes(mode) ? mode : "stance";
+}
+
+/**
+ * Like the analyst's specialization, the issue is injected into every
+ * stance-mode run — keep pasted text bounded.
+ */
+const PERSONALITY_ISSUE_MAX = 1000;
+
+function parsePersonalityIssue(value: FormDataEntryValue | null): string {
+  return String(value ?? "")
+    .trim()
+    .slice(0, PERSONALITY_ISSUE_MAX);
+}
+
+export async function addPersonalityExpert(
+  topicId: string,
+  formData: FormData,
+): Promise<void> {
+  const { supabase, user } = await requireUser();
+
+  const mode = parsePersonalityMode(formData.get("personality_mode"));
+  const issue = parsePersonalityIssue(formData.get("issue"));
+
+  await supabase.from("experts").insert({
+    topic_id: topicId,
+    user_id: user.id,
+    kind: "personality",
+    name: parseExpertName(formData.get("name"), "Personality"),
+    status: "active",
+    // Stance mode with an empty issue falls back to the topic's own
+    // analytical question (or description) at run time.
+    config: {
+      personality_mode: mode,
+      ...(mode === "stance" && issue ? { issue } : {}),
+    },
+  });
+
+  revalidatePath(`/topics/${topicId}/experts`);
+  revalidatePath(`/topics/${topicId}`);
+  redirect(`/topics/${topicId}/experts`);
+}
+
+/**
+ * Personality display name + tracked issue. The mode is fixed at creation —
+ * its memory (roster vs profiled names) wouldn't survive a switch; add a
+ * second Personality expert for the other mode instead.
+ */
+export async function updatePersonalitySettings(
+  expertId: string,
+  formData: FormData,
+): Promise<void> {
+  const { supabase } = await requireUser();
+
+  const { data: expert } = await supabase
+    .from("experts")
+    .select("topic_id, config")
+    .eq("id", expertId)
+    .maybeSingle<Pick<Expert, "topic_id" | "config">>();
+  if (!expert) return;
+
+  const issue = parsePersonalityIssue(formData.get("issue"));
+  await supabase
+    .from("experts")
+    .update({
+      name: parseExpertName(formData.get("name"), "Personality"),
+      config:
+        expert.config.personality_mode === "stance"
+          ? { ...expert.config, issue: issue || undefined }
+          : expert.config,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", expertId);
+
+  revalidatePath(`/topics/${expert.topic_id}/experts`);
+  // The briefing shows the expert's name on its panel.
+  revalidatePath(`/topics/${expert.topic_id}`);
 }
 
 /** Analyst display name + specialization. */

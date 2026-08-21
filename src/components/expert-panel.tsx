@@ -10,6 +10,7 @@ import {
   MessagesSquare,
   RefreshCw,
   RotateCcw,
+  Users,
 } from "lucide-react";
 import { mentorTipFeedback } from "@/lib/actions";
 import { linkBadgeLabel, splitMarkdownLinks } from "@/lib/md-links";
@@ -21,7 +22,11 @@ import {
   type ExpertOutput,
   type LegacyAnalystAnalysis,
   type MentorTip,
+  type PersonalityOutput,
+  type PersonalityProfile,
+  type PersonalityStance,
   type ScenarioLikelihood,
+  type StanceTrend,
 } from "@/lib/types";
 import { Badge, Spinner } from "./ui";
 
@@ -109,6 +114,8 @@ function ExpertCard({
             <Landmark className="size-5" />
           ) : expert.kind === "sentiment" ? (
             <MessagesSquare className="size-5" />
+          ) : expert.kind === "personality" ? (
+            <Users className="size-5" />
           ) : (
             <Bot className="size-5" />
           )}
@@ -120,11 +127,16 @@ function ExpertCard({
               ? (expert.config.focus ?? "Neutral, evidence-based analysis")
               : expert.kind === "sentiment"
                 ? "What Reddit makes of this report's main points"
-                : `${
-                    expert.config.teaching_focus === "entities"
-                      ? "Explains the people, organisations & their ties"
-                      : "Helps you understand key concepts"
-                  } · ${expert.config.level ?? "basic"} level`}
+                : expert.kind === "personality"
+                  ? expert.config.personality_mode === "profiles"
+                    ? "Who's who in this report"
+                    : (expert.config.issue ??
+                      "Key players' stances, tracked over time")
+                  : `${
+                      expert.config.teaching_focus === "entities"
+                        ? "Explains the people, organisations & their ties"
+                        : "Helps you understand key concepts"
+                    } · ${expert.config.level ?? "basic"} level`}
           </p>
         </div>
         {output && (
@@ -170,6 +182,14 @@ function ExpertCard({
             ) : (
               <p className="px-4 py-4 text-sm text-ink-faint">
                 No analysis recorded for this report.
+              </p>
+            )
+          ) : expert.kind === "personality" ? (
+            output.output.personality ? (
+              <PersonalityBody personality={output.output.personality} />
+            ) : (
+              <p className="px-4 py-4 text-sm text-ink-faint">
+                No personality reading recorded for this report.
               </p>
             )
           ) : (
@@ -394,6 +414,146 @@ function LegacyAnalystBody({ analysis }: { analysis: LegacyAnalystAnalysis }) {
         </p>
       )}
     </div>
+  );
+}
+
+const TREND_LABEL: Record<StanceTrend, string | null> = {
+  baseline: "baseline",
+  new: "new",
+  shifted: "shifted",
+  unchanged: null, // no badge — stability is the quiet default
+};
+
+const TREND_TONE: Record<StanceTrend, "active" | "neutral" | "paused"> = {
+  baseline: "neutral",
+  new: "active",
+  shifted: "active",
+  unchanged: "neutral",
+};
+
+function PersonalityBody({ personality }: { personality: PersonalityOutput }) {
+  if (personality.mode === "profiles") {
+    const profiles = personality.profiles ?? [];
+    if (profiles.length === 0) {
+      return (
+        <p className="px-4 py-4 text-sm text-ink-faint">
+          No one new to introduce in this report — you know the cast already.
+        </p>
+      );
+    }
+    return (
+      <ul className="divide-y divide-rule">
+        {profiles.map((profile) => (
+          <PersonCard key={profile.name} person={profile}>
+            <CommentaryWithLinkBadges text={profile.who} />
+            <p className="mt-1.5 text-sm leading-relaxed text-ink-soft">
+              <span className="font-semibold">In this report:</span>{" "}
+              <CommentaryWithLinkBadges text={profile.relevance} inline />
+            </p>
+          </PersonCard>
+        ))}
+      </ul>
+    );
+  }
+
+  const stances = personality.stances ?? [];
+  return (
+    <div>
+      {personality.baseline && (
+        <p className="border-b border-rule bg-neutral-50 px-4 py-2 text-xs leading-relaxed text-ink-soft">
+          First look: a web scan of the key players and where they stand
+          today. Future reports track how each stance moves.
+        </p>
+      )}
+      {stances.length === 0 ? (
+        <p className="px-4 py-4 text-sm text-ink-faint">
+          No key players identified yet.
+        </p>
+      ) : (
+        <ul className="divide-y divide-rule">
+          {stances.map((stance) => (
+            <PersonCard
+              key={stance.name}
+              person={stance}
+              badge={
+                TREND_LABEL[stance.trend] && (
+                  <Badge tone={TREND_TONE[stance.trend]}>
+                    {TREND_LABEL[stance.trend]}
+                  </Badge>
+                )
+              }
+            >
+              <div className="space-y-3">
+                <div>
+                  <h4 className="text-sm font-bold">Why they matter</h4>
+                  <CommentaryWithLinkBadges text={stance.why_matters} />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold">Current stance</h4>
+                  <CommentaryWithLinkBadges text={stance.stance} />
+                </div>
+              </div>
+              {stance.change_note && (
+                <p className="mt-2 rounded-md bg-neutral-50 px-3 py-2 text-xs leading-relaxed text-ink-soft">
+                  <span className="font-semibold">What changed:</span>{" "}
+                  <CommentaryWithLinkBadges text={stance.change_note} inline />
+                </p>
+              )}
+            </PersonCard>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/** Shared person layout: portrait + name header, kind-specific body below. */
+function PersonCard({
+  person,
+  badge,
+  children,
+}: {
+  person: Pick<
+    PersonalityStance | PersonalityProfile,
+    "name" | "image_url" | "image_page_url"
+  >;
+  badge?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  const [imageFailed, setImageFailed] = useState(false);
+  return (
+    <li className="px-4 py-4">
+      <div className="mb-2 flex items-center gap-3">
+        {person.image_url && !imageFailed ? (
+          <a
+            href={person.image_page_url || undefined}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="shrink-0"
+            title={`${person.name} on Wikipedia`}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={person.image_url}
+              alt={person.name}
+              loading="lazy"
+              onError={() => setImageFailed(true)}
+              className="size-12 rounded-full border border-rule bg-neutral-50 object-cover"
+            />
+          </a>
+        ) : (
+          <span
+            aria-hidden
+            className="flex size-12 shrink-0 items-center justify-center rounded-full border border-rule bg-neutral-50"
+          >
+            <Users className="size-5 text-ink-faint" />
+          </span>
+        )}
+        <p className="min-w-0 flex-1 text-base font-bold">{person.name}</p>
+        {badge}
+      </div>
+      {children}
+    </li>
   );
 }
 

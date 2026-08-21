@@ -1,6 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Bot, ChevronLeft, Landmark, MessagesSquare, Plus } from "lucide-react";
+import {
+  Bot,
+  ChevronLeft,
+  Landmark,
+  MessagesSquare,
+  Plus,
+  Users,
+} from "lucide-react";
 import { LinkPending } from "@/components/link-pending";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Expert, Topic } from "@/lib/types";
@@ -67,7 +74,7 @@ export default async function TopicExpertsPage({
           the public mood on Reddit.
         </p>
       ) : (
-        <ul className="mt-6 grid grid-cols-2 gap-4">
+        <ul className="mt-6 grid auto-rows-fr grid-cols-2 gap-4">
           {experts.map((expert) => (
             <ExpertTile key={expert.id} expert={expert} topicId={topicId} />
           ))}
@@ -87,12 +94,14 @@ const KIND_TITLE: Record<Expert["kind"], string> = {
   mentor: "Mentor",
   analyst: "Analyst",
   sentiment: "Sentiment",
+  personality: "Personality",
 };
 
 const KIND_ICON: Record<Expert["kind"], React.ReactNode> = {
   mentor: <Bot className="size-5" />,
   analyst: <Landmark className="size-5" />,
   sentiment: <MessagesSquare className="size-5" />,
+  personality: <Users className="size-5" />,
 };
 
 /** One expert as a tappable summary card. */
@@ -147,6 +156,21 @@ function ExpertTile({ expert, topicId }: { expert: Expert; topicId: string }) {
             Searches Reddit for public reaction to each report&apos;s main
             points and reads the prevailing mood.
           </p>
+        ) : expert.kind === "personality" ? (
+          <>
+            {expert.name !== "Personality" && (
+              <p className="mt-3 truncate text-sm font-semibold">
+                {expert.name}
+              </p>
+            )}
+            <p className="mt-1 line-clamp-4 text-xs leading-relaxed text-ink-faint">
+              {expert.config.personality_mode === "profiles"
+                ? "Profiles the people mentioned in each report — who they are and why they matter."
+                : expert.config.issue?.trim()
+                  ? `Tracks key players' stances on: ${expert.config.issue}`
+                  : "Tracks key players' stances on the topic's own question over time."}
+            </p>
+          </>
         ) : (
           <>
             <p className="mt-3 text-xs leading-relaxed text-ink-faint">

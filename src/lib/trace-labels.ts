@@ -16,6 +16,10 @@ const STAGE_LABEL: Record<string, string> = {
   mentor_tips: "Mentor — teaching tips",
   mentor_more: "Mentor — deeper explanation",
   analyst_analysis: "Analyst — interpret the report",
+  sentiment_reading: "Sentiment — read the public mood",
+  personality_baseline: "Personality — scan for key players",
+  personality_update: "Personality — update tracked stances",
+  personality_profiles: "Personality — profile mentioned people",
   // Legacy pipeline stages (older stored traces)
   search_plan: "Topic planner — build search queries",
   followup_queries: "Follow-up planner — target queries from news findings",

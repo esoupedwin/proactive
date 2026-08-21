@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Bot, Landmark, MessagesSquare } from "lucide-react";
+import { Bot, Landmark, MessagesSquare, Users } from "lucide-react";
+import type { PersonalityMode } from "@/lib/types";
 import { MarkdownTextarea } from "./markdown-textarea";
 import { SubmitButton } from "./submit-button";
 import { Field, Input, Select } from "./ui";
 
-type ExpertKindChoice = "mentor" | "analyst" | "sentiment";
+type ExpertKindChoice = "mentor" | "analyst" | "sentiment" | "personality";
 
 /**
  * Two-step add-expert flow: pick the expert type, then fill in its details.
@@ -20,6 +21,7 @@ export function NewExpertForm({
   addMentor,
   addAnalyst,
   addSentiment,
+  addPersonality,
 }: {
   topicId: string;
   /** Mentor is one-per-topic; an existing one disables the choice. */
@@ -29,8 +31,11 @@ export function NewExpertForm({
   addMentor: (formData: FormData) => Promise<void>;
   addAnalyst: (formData: FormData) => Promise<void>;
   addSentiment: () => Promise<void>;
+  addPersonality: (formData: FormData) => Promise<void>;
 }) {
   const [kind, setKind] = useState<ExpertKindChoice | null>(null);
+  const [personalityMode, setPersonalityMode] =
+    useState<PersonalityMode>("stance");
 
   return (
     <div className="space-y-6">
@@ -38,7 +43,7 @@ export function NewExpertForm({
         <legend className="mb-2 text-sm font-semibold">
           What kind of expert?
         </legend>
-        <div className="grid grid-cols-2 gap-4" role="radiogroup">
+        <div className="grid auto-rows-fr grid-cols-2 gap-4" role="radiogroup">
           <TypeCard
             selected={kind === "mentor"}
             disabled={mentorExists}
@@ -69,6 +74,13 @@ export function NewExpertForm({
                 ? "Already on this topic — one Sentiment reader per topic."
                 : "Searches Reddit for public reaction to each report's main points and reads the mood."
             }
+          />
+          <TypeCard
+            selected={kind === "personality"}
+            onSelect={() => setKind("personality")}
+            icon={<Users className="size-5" aria-hidden />}
+            title="Personality"
+            description="Studies the people behind the topic — tracks key players' stances on an issue, or profiles who's mentioned in each report."
           />
         </div>
       </fieldset>
@@ -132,6 +144,65 @@ export function NewExpertForm({
             />
           </Field>
           <SubmitButton pendingLabel="Adding Analyst…">Add Analyst</SubmitButton>
+        </form>
+      )}
+
+      {kind === "personality" && (
+        <form
+          action={addPersonality}
+          className="space-y-3 border-t border-rule pt-5"
+        >
+          <Field
+            label="Name"
+            htmlFor="add_personality_name"
+            hint="Optional — defaults to “Personality”. With several, distinct names keep their sections apart."
+          >
+            <Input
+              id="add_personality_name"
+              name="name"
+              maxLength={60}
+              placeholder="e.g. Key Players"
+            />
+          </Field>
+          <Field
+            label="Objective"
+            htmlFor="personality_mode"
+            hint="Fixed once added — add a second Personality expert for the other objective."
+          >
+            <Select
+              id="personality_mode"
+              name="personality_mode"
+              value={personalityMode}
+              onChange={(e) =>
+                setPersonalityMode(e.target.value as PersonalityMode)
+              }
+            >
+              <option value="stance">
+                Track key players&apos; stances on an issue over time
+              </option>
+              <option value="profiles">
+                Understand the people mentioned in each report
+              </option>
+            </Select>
+          </Field>
+          {personalityMode === "stance" && (
+            <Field
+              label="Issue to track"
+              htmlFor="personality_issue"
+              hint="Optional — defaults to the topic's own question. On its first run this expert scans the web for the key players and stores a baseline of their stances; later runs track how each stance moves."
+            >
+              <MarkdownTextarea
+                id="personality_issue"
+                name="issue"
+                maxLength={1000}
+                rows={3}
+                placeholder="e.g. Will UMNO leave the Unity Government?"
+              />
+            </Field>
+          )}
+          <SubmitButton pendingLabel="Adding Personality…">
+            Add Personality
+          </SubmitButton>
         </form>
       )}
 
