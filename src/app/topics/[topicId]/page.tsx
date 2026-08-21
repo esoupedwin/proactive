@@ -20,6 +20,7 @@ import {
   formatDateTime,
   formatUsageSummary,
   isGenerationLocked,
+  nextUpdateLabel,
 } from "@/lib/reports";
 import { keyEntitiesFromMemory } from "@/lib/entities";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -203,6 +204,13 @@ export default async function TopicBriefingPage({
                 .filter(Boolean)
                 .join(" · ")
             : "No report yet"}
+        </p>
+        <p className="mt-0.5 text-xs text-ink-faint">
+          {nextUpdateLabel(
+            topic.frequency,
+            topic.status,
+            topic.last_generated_at,
+          )}
         </p>
       </header>
 

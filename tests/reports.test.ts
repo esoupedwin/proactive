@@ -1,9 +1,11 @@
 ﻿import { describe, expect, it } from "vitest";
 import {
+  formatDateTime,
   formatElapsed,
   isGenerationLocked,
   isTopicDue,
   nextScheduledRun,
+  nextUpdateLabel,
   paginate,
   takeawayPoints,
 } from "@/lib/reports";
@@ -165,6 +167,34 @@ describe("nextScheduledRun", () => {
         new Date("2026-07-25T09:00:00Z"),
       )?.toISOString(),
     ).toBe("2026-07-26T08:00:00.000Z");
+  });
+});
+
+describe("nextUpdateLabel", () => {
+  it("names the next scheduled run for an active, scheduled topic", () => {
+    // Generated 07:30 today → due 06:30 tomorrow → tick tomorrow 08:00.
+    expect(nextUpdateLabel("daily", "active", "2026-07-25T07:30:00Z", NOW)).toBe(
+      `Next update ${formatDateTime("2026-07-26T08:00:00.000Z")}`,
+    );
+  });
+
+  it("says why there is no next run instead of going blank", () => {
+    expect(nextUpdateLabel("daily", "paused", null, NOW)).toBe(
+      "Paused — no automatic updates",
+    );
+    expect(nextUpdateLabel("manual", "active", null, NOW)).toBe(
+      "Manual updates only",
+    );
+    // Paused wins: a paused manual topic is paused first.
+    expect(nextUpdateLabel("manual", "paused", null, NOW)).toBe(
+      "Paused — no automatic updates",
+    );
+  });
+
+  it("covers a topic that has never generated", () => {
+    expect(nextUpdateLabel("daily", "active", null, NOW)).toBe(
+      `Next update ${formatDateTime("2026-07-25T08:00:00.000Z")}`,
+    );
   });
 });
 

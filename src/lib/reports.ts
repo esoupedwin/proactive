@@ -102,6 +102,24 @@ export function nextScheduledRun(
   return nextCronTickAfter(earliest);
 }
 
+/**
+ * The briefing header's one-line answer to "when does this refresh?" — the
+ * next scheduled run, or why there isn't one. Paused and manual topics say so
+ * rather than going blank, so the header never leaves the cadence a mystery.
+ */
+export function nextUpdateLabel(
+  frequency: UpdateFrequency,
+  status: TopicStatus,
+  lastGeneratedAt: string | null,
+  now: Date = new Date(),
+): string {
+  const next = nextScheduledRun(frequency, status, lastGeneratedAt, now);
+  if (next) return `Next update ${formatDateTime(next.toISOString())}`;
+  return status !== "active"
+    ? "Paused — no automatic updates"
+    : "Manual updates only";
+}
+
 /** Whether an in-flight generation should block starting another one. */
 export function isGenerationLocked(
   latestGenerating: Pick<Report, "status" | "created_at"> | null,
