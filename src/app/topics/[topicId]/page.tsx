@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { after } from "next/server";
 import { Activity, Bot, Coins, History, Layers, Pencil } from "lucide-react";
 import { AgentMemoryButton } from "@/components/agent-memory-button";
-import { BottomNav } from "@/components/bottom-nav";
+import { BottomNav, type NavTopic } from "@/components/bottom-nav";
 import { ExpertPanel, type ExpertPanelItem } from "@/components/expert-panel";
 import { GenerateButton } from "@/components/generate-button";
 import { GenerationWatcher } from "@/components/generation-watcher";
@@ -24,6 +24,7 @@ import {
 } from "@/lib/reports";
 import { keyEntitiesFromMemory } from "@/lib/entities";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { isTopicUnread } from "@/lib/types";
 import type {
   AgentStateData,
   Expert,
@@ -73,7 +74,7 @@ export default async function TopicBriefingPage({
     supabase.from("topics").select("*").eq("id", topicId).maybeSingle<Topic>(),
     supabase
       .from("topics")
-      .select("id, title")
+      .select("id, title, last_generated_at, last_read_at")
       .order("position")
       .order("created_at"),
     supabase
@@ -100,14 +101,35 @@ export default async function TopicBriefingPage({
   ]);
   if (!user || !topic) notFound();
 
-  // Remember for the post-login redirect — after the response is sent, so
-  // this write never delays the page.
-  after(() =>
-    supabase
-      .from("profiles")
-      .update({ last_viewed_topic_id: topic.id })
-      .eq("id", user.id),
-  );
+  // Remember for the post-login redirect, and mark this topic's report read so
+  // the switcher stops listing it as new — after the response is sent, so
+  // neither write delays the page.
+  after(async () => {
+    await Promise.all([
+      supabase
+        .from("profiles")
+        .update({ last_viewed_topic_id: topic.id })
+        .eq("id", user.id),
+      supabase
+        .from("topics")
+        .update({ last_read_at: new Date().toISOString() })
+        .eq("id", topic.id),
+    ]);
+  });
+
+  // The switcher separates topics with an unread report from the rest. This
+  // topic counts as read — the `after` write above just marked it so.
+  const navBarTopics: NavTopic[] = (
+    (navTopics ?? []) as Pick<
+      Topic,
+      "id" | "title" | "last_generated_at" | "last_read_at"
+    >[]
+  ).map((t) => ({
+    id: t.id,
+    title: t.title,
+    unread: t.id !== topic.id && isTopicUnread(t),
+    updatedAt: t.last_generated_at,
+  }));
 
   const stateRows = (agentStates ?? []) as {
     agent: string;
@@ -339,7 +361,7 @@ export default async function TopicBriefingPage({
       </div>
       </div>
 
-      <BottomNav topics={navTopics ?? []} currentId={topic.id} />
+      <BottomNav topics={navBarTopics} currentId={topic.id} />
     </main>
   );
 }

@@ -8,9 +8,18 @@ import { TopicSwitcher } from "./topic-switcher";
 export interface NavTopic {
   id: string;
   title: string;
+  /** Has a report that landed since the briefing was last opened. */
+  unread?: boolean;
+  /** When that report landed, for ordering the switcher's unread segment. */
+  updatedAt?: string | null;
 }
 
-/** Fixed bottom bar: previous topic / current title / next topic / settings. */
+/**
+ * Fixed bottom bar: previous topic / current title / next topic / settings.
+ *
+ * `topics` stays in the user's own order — prev/next step through the list as
+ * arranged on Settings. Only the switcher menu regroups by unread.
+ */
 export function BottomNav({
   topics,
   currentId,

@@ -56,8 +56,28 @@ export interface Topic {
   /** Reusable news-search query, LLM-formulated at topic setup. */
   news_query: string | null;
   last_generated_at: string | null;
+  /** When the briefing was last opened; null means never. See `isTopicUnread`. */
+  last_read_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/**
+ * Whether a topic has a report the user hasn't opened yet — a report exists,
+ * and it landed after the last time the briefing was read.
+ */
+export function isTopicUnread(
+  topic: Pick<Topic, "last_generated_at" | "last_read_at">,
+): boolean {
+  if (!topic.last_generated_at) return false;
+  if (!topic.last_read_at) return true;
+  // Parsed rather than compared as strings: Postgres renders timestamptz with
+  // a "+00:00" offset while `toISOString()` writes "Z", so the two spellings
+  // of the same instant do not sort against each other.
+  return (
+    new Date(topic.last_read_at).getTime() <
+    new Date(topic.last_generated_at).getTime()
+  );
 }
 
 /** A single bullet in a report section. `source_refs` are indexes into the report's sources. */

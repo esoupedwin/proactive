@@ -28,6 +28,7 @@ function makeTopic(overrides: Partial<Topic>): Topic {
     position: 0,
     news_query: null,
     last_generated_at: null,
+    last_read_at: null,
     created_at: "2026-07-01T00:00:00Z",
     updated_at: "2026-07-01T00:00:00Z",
     ...overrides,

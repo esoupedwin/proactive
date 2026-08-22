@@ -33,6 +33,7 @@ const topic: Topic = {
   position: 0,
   news_query: null,
   last_generated_at: null,
+  last_read_at: null,
   created_at: "2026-01-01T00:00:00Z",
   updated_at: "2026-01-01T00:00:00Z",
 };
