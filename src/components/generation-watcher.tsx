@@ -71,20 +71,23 @@ export function GenerationWatcher({
       data-no-capture
       className="pointer-events-none fixed inset-x-0 bottom-14 z-40 mx-auto w-full max-w-md px-3 pb-2"
     >
+      {/* Inverted against the page, matching the Generate button's own
+          progress toast — the two are the same status shown from different
+          entry points and should look the same. */}
       <div
         role="status"
         aria-live="polite"
-        className="pointer-events-auto rounded-md border border-rule bg-paper px-4 py-3 shadow-lg"
+        className="pointer-events-auto rounded-md border border-ink bg-ink px-4 py-3 text-paper shadow-lg"
       >
         <div className="flex items-center justify-between gap-3">
           <p className="flex items-center gap-2 text-sm font-medium">
-            <Spinner className="text-ink-faint" /> {stage}…
+            <Spinner className="text-paper/70" /> {stage}…
           </p>
-          <p className="font-mono text-sm tabular-nums text-ink-soft">
+          <p className="font-mono text-sm tabular-nums text-paper/70">
             {formatElapsed(elapsedMs)}
           </p>
         </div>
-        <p className="mt-1.5 text-xs leading-relaxed text-ink-faint">
+        <p className="mt-1.5 text-xs leading-relaxed text-paper/60">
           An update is being generated for this topic. The report will appear
           here automatically when it&apos;s ready.
         </p>
