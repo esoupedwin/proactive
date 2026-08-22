@@ -1,8 +1,15 @@
 import { Runner, type ModelProvider } from "@openai/agents";
 import { findHeroImage, type ImageFetcher } from "../../ai/images";
+import type { Llm } from "../../ai/llm";
 import type { TraceCollector } from "../../ai/trace";
 import type { UsageCollector } from "../../ai/usage";
-import type { Extract, ExtractRecord, ReportSections, Topic } from "../../types";
+import type {
+  Extract,
+  ExtractRecord,
+  KnowledgeFact,
+  ReportSections,
+  Topic,
+} from "../../types";
 import {
   createOpenAiModelProvider,
   initAgentsSdk,
@@ -22,6 +29,11 @@ import {
   composeReport,
   composeTrendingReport,
 } from "./compose";
+import {
+  applySituationUpdates,
+  establishSituation,
+  situationSnapshot,
+} from "./situation";
 import type { ReporterToolDeps } from "./tools";
 
 export interface ReporterRunResult {
@@ -63,6 +75,12 @@ export async function runReporter(options: {
   store: ExtractStore;
   topic: Topic;
   reportId: string;
+  /**
+   * Question mode: used once, to establish the topic's standing facts with
+   * a bounded web search before the first assessment. The agent loop never
+   * searches; omit to skip establishing (the loop then runs without facts).
+   */
+  llm?: Llm;
   usage?: UsageCollector;
   trace?: TraceCollector;
   imageFetcher?: ImageFetcher;
@@ -101,6 +119,25 @@ export async function runReporter(options: {
     const previousReport = await persistence.getLatestReadyReport(topic.id);
     const feedback = await store.recentFeedback(topic.id, 5);
 
+    const question = topic.watch_mode === "question";
+    const trending = topic.watch_mode === "trending";
+
+    // Question topics reason from standing facts. They are established once,
+    // by the only web search the reporter ever makes; an empty base means a
+    // first run (or the user cleared them). Failure is non-fatal — an
+    // assessment without facts is still an assessment.
+    let situation = question ? await store.getTopicFacts(topic.id) : [];
+    if (question && situation.length === 0 && options.llm) {
+      setStage("Establishing the situation");
+      try {
+        situation = await establishSituation(options.llm, topic);
+        await store.saveTopicFacts(topic, situation);
+      } catch (err) {
+        console.error("establishing situation failed", err);
+        situation = [];
+      }
+    }
+
     const deps: ReporterToolDeps = {
       store,
       topic,
@@ -112,11 +149,9 @@ export async function runReporter(options: {
       deps,
       model,
       recentSubtopics,
+      situation,
       trace,
     });
-
-    const question = topic.watch_mode === "question";
-    const trending = topic.watch_mode === "trending";
     const input = JSON.stringify({
       now: startedAt,
       instruction: question
@@ -178,6 +213,20 @@ export async function runReporter(options: {
         : composeReport(final as ReporterFinal, deps.served);
     const sections = composed.sections;
 
+    // Fold any evidence-backed revisions into the fact base, and snapshot
+    // the base into the report so history shows what this verdict rested on.
+    let revisedSituation: KnowledgeFact[] | null = null;
+    if (question && situation.length > 0) {
+      const updates = (final as QuestionReporterFinal).situation_updates.filter(
+        // Same anti-hallucination guard as bullets: a revision must cite
+        // extracts this run actually served.
+        (u) => u.extract_ids.some((id) => deps.served.has(id)),
+      );
+      const applied = applySituationUpdates(situation, updates);
+      if (applied.revised.size > 0) revisedSituation = applied.facts;
+      sections.current_state = situationSnapshot(applied.facts, applied.revised);
+    }
+
     // Best-effort cover image — never fails the run.
     if (composed.snapshot.length > 0 && !sections.no_meaningful_change) {
       setStage("Selecting a cover image");
@@ -208,6 +257,9 @@ export async function runReporter(options: {
         ...(cursor ? { cursor } : {}),
         last_run_at: new Date().toISOString(),
       });
+      if (revisedSituation) {
+        await store.saveTopicFacts(topic, revisedSituation);
+      }
     } catch (err) {
       console.error("reporter state update failed", err);
     }

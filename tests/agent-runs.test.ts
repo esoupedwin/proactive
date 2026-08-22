@@ -9,9 +9,15 @@ import { createInMemoryExtractStore } from "@/lib/agents/extract-store";
 import type { ReporterPersistence } from "@/lib/agents/report-store";
 import { runReporter } from "@/lib/agents/reporter/run";
 import { runInfoTracker } from "@/lib/agents/tracker/run";
+import type { Llm } from "@/lib/ai/llm";
 import { createTraceCollector } from "@/lib/ai/trace";
 import { createUsageCollector } from "@/lib/ai/usage";
-import type { ExtractRecord, ReportSections, Topic } from "@/lib/types";
+import type {
+  ExtractRecord,
+  KnowledgeFact,
+  ReportSections,
+  Topic,
+} from "@/lib/types";
 
 /**
  * End-to-end agent runs against a scripted fake model — verifies the full
@@ -299,5 +305,312 @@ describe("reporter run", () => {
     expect(state.failed).toBeTruthy();
     // A failed run must not advance the cursor.
     expect(await store.getAgentState(topic.id, "reporter")).toEqual({});
+  });
+});
+
+describe("reporter situation (question mode)", () => {
+  const questionTopic: Topic = {
+    ...topic,
+    id: "topic-q",
+    watch_mode: "question",
+    analytical_question:
+      "Will Republicans retain control of both chambers after the 2026 midterms?",
+    interest_frame: [
+      { name: "Senate map", key_question: "", indicators: [] },
+    ],
+  };
+
+  const seatFact: KnowledgeFact = {
+    fact: "Republicans hold 53 Senate seats.",
+    kind: "state",
+    entities: ["Republicans"],
+    confidence: "high",
+    source_note: "Senate.gov",
+    as_of: "2026-08-01",
+  };
+  const ruleFact: KnowledgeFact = {
+    fact: "A party needs 51 seats, or 50 plus the Vice President, to control the Senate.",
+    kind: "rule",
+    entities: ["Senate"],
+    confidence: "high",
+    source_note: "Senate.gov",
+    as_of: null,
+  };
+
+  /** An Llm whose only job is to answer the situation pre-step. */
+  function situationLlm(facts: KnowledgeFact[]) {
+    const calls: { schemaName: string; useWebSearch?: boolean }[] = [];
+    const llm: Llm = {
+      async structured(options) {
+        calls.push({
+          schemaName: options.schemaName,
+          useWebSearch: options.useWebSearch,
+        });
+        return { facts } as never;
+      },
+    };
+    return { llm, calls };
+  }
+
+  function questionFinal(overrides: object = {}) {
+    return finalMessage({
+      verdict: {
+        answer: "Likely to retain both.",
+        likelihood: "likely",
+        confidence: "medium",
+        trend: "baseline",
+        rationale: [{ text: "Map favours incumbents.", extract_ids: [] }],
+      },
+      factor_assessments: [],
+      situation_updates: [],
+      what_changed: [{ text: "Initial assessment.", extract_ids: [] }],
+      no_meaningful_change: false,
+      summary: "Baseline",
+      cover_extract_id: null,
+      key_subtopics: [],
+      ...overrides,
+    });
+  }
+
+  it("establishes the facts with one web-search call on the first run and snapshots them into the report", async () => {
+    const store = createInMemoryExtractStore();
+    const { llm, calls } = situationLlm([ruleFact, seatFact]);
+    const { persistence, state, stages } = makeMemoryPersistence();
+
+    const result = await runReporter({
+      persistence,
+      store,
+      topic: questionTopic,
+      reportId: "report-q1",
+      llm,
+      modelProvider: fakeProvider([
+        [functionCall("get_new_extracts", {}, "c1")],
+        [questionFinal()],
+      ]),
+    });
+
+    expect(result.ok).toBe(true);
+    // Exactly one pre-step call, with search, before the agent loop ran.
+    expect(calls).toEqual([{ schemaName: "situation", useWebSearch: true }]);
+    expect(stages).toContain("Establishing the situation");
+    expect(await store.getTopicFacts(questionTopic.id)).toEqual([
+      ruleFact,
+      seatFact,
+    ]);
+    // Rules first, then state, each with its as-of date.
+    expect(state.completed?.sections.current_state).toEqual([
+      { fact: ruleFact.fact, kind: "rule", as_of: null },
+      { fact: seatFact.fact, kind: "state", as_of: "2026-08-01" },
+    ]);
+  });
+
+  it("never searches again once the facts exist", async () => {
+    const store = createInMemoryExtractStore();
+    await store.saveTopicFacts(questionTopic, [ruleFact, seatFact]);
+    const { llm, calls } = situationLlm([]);
+    const { persistence, state } = makeMemoryPersistence();
+
+    await runReporter({
+      persistence,
+      store,
+      topic: questionTopic,
+      reportId: "report-q2",
+      llm,
+      modelProvider: fakeProvider([
+        [functionCall("get_new_extracts", {}, "c1")],
+        [questionFinal()],
+      ]),
+    });
+
+    expect(calls).toEqual([]);
+    expect(state.completed?.sections.current_state).toHaveLength(2);
+  });
+
+  it("ignores legacy kind-less facts and establishes the real situation over them", async () => {
+    // A topic switched from monitor to question mode carries the old
+    // pipeline's "AP reports…" entries in topic_memory.facts. They are
+    // developments, not a situation, and must not suppress the pre-step.
+    const store = createInMemoryExtractStore();
+    store.facts.set(questionTopic.id, [
+      {
+        fact: "AP reports a candidate announced a Senate run.",
+        entities: ["AP"],
+        confidence: "medium",
+        source_note: "seed",
+      },
+    ]);
+    const { llm, calls } = situationLlm([ruleFact]);
+    const { persistence, state } = makeMemoryPersistence();
+
+    await runReporter({
+      persistence,
+      store,
+      topic: questionTopic,
+      reportId: "report-q6",
+      llm,
+      modelProvider: fakeProvider([
+        [functionCall("get_new_extracts", {}, "c1")],
+        [questionFinal()],
+      ]),
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(await store.getTopicFacts(questionTopic.id)).toEqual([ruleFact]);
+    expect(state.completed?.sections.current_state).toEqual([
+      { fact: ruleFact.fact, kind: "rule", as_of: null },
+    ]);
+  });
+
+  it("does not establish facts for a monitor topic", async () => {
+    const store = createInMemoryExtractStore();
+    const { llm, calls } = situationLlm([seatFact]);
+    const { persistence, state } = makeMemoryPersistence();
+
+    await runReporter({
+      persistence,
+      store,
+      topic,
+      reportId: "report-m1",
+      llm,
+      modelProvider: fakeProvider([
+        [functionCall("get_new_extracts", {}, "c1")],
+        [
+          finalMessage({
+            latest_developments: [],
+            community_reaction: [],
+            practitioner_view: [],
+            cross_source_takeaway: [],
+            what_changed: [{ text: "baseline", extract_ids: [] }],
+            no_meaningful_change: false,
+            summary: "s",
+            cover_extract_id: null,
+            key_subtopics: [],
+          }),
+        ],
+      ]),
+    });
+
+    expect(calls).toEqual([]);
+    expect(await store.getTopicFacts(topic.id)).toEqual([]);
+    expect(state.completed?.sections.current_state).toBeUndefined();
+  });
+
+  it("revises a state fact from cited evidence and persists the revision", async () => {
+    const store = createInMemoryExtractStore();
+    await store.saveTopicFacts(questionTopic, [ruleFact, seatFact]);
+    const { extract } = await store.createExtract(questionTopic, {
+      source_type: "news",
+      title: "Democrat wins Ohio special election",
+      publisher: "AP",
+      url: "https://example.com/ohio",
+      published_at: "2026-08-20",
+      factor: "Senate map",
+      gist: "Senate now 52-48.",
+      relevance: "Changes the arithmetic",
+      novelty: "new",
+      contradiction: "",
+    });
+    const { llm } = situationLlm([]);
+    const { persistence, state } = makeMemoryPersistence();
+
+    await runReporter({
+      persistence,
+      store,
+      topic: questionTopic,
+      reportId: "report-q3",
+      llm,
+      modelProvider: fakeProvider([
+        [functionCall("get_new_extracts", {}, "c1")],
+        [
+          questionFinal({
+            situation_updates: [
+              {
+                fact: seatFact.fact,
+                revised_fact: "Republicans hold 52 Senate seats.",
+                as_of: "2026-08-20",
+                extract_ids: [extract.id],
+              },
+              // Cites nothing this run served — must be ignored.
+              {
+                fact: ruleFact.fact,
+                revised_fact: "A party needs 60 seats.",
+                as_of: null,
+                extract_ids: ["not-served"],
+              },
+            ],
+          }),
+        ],
+      ]),
+    });
+
+    const facts = await store.getTopicFacts(questionTopic.id);
+    expect(facts[0]).toEqual(ruleFact);
+    expect(facts[1]!.fact).toBe("Republicans hold 52 Senate seats.");
+    expect(facts[1]!.as_of).toBe("2026-08-20");
+    expect(state.completed?.sections.current_state?.[1]).toEqual({
+      fact: "Republicans hold 52 Senate seats.",
+      kind: "state",
+      as_of: "2026-08-20",
+      revised: true,
+    });
+  });
+
+  it("ignores a revision whose evidence was never served, even for a state fact", async () => {
+    const store = createInMemoryExtractStore();
+    await store.saveTopicFacts(questionTopic, [seatFact]);
+    const { llm } = situationLlm([]);
+    const { persistence } = makeMemoryPersistence();
+
+    await runReporter({
+      persistence,
+      store,
+      topic: questionTopic,
+      reportId: "report-q4",
+      llm,
+      modelProvider: fakeProvider([
+        [functionCall("get_new_extracts", {}, "c1")],
+        [
+          questionFinal({
+            situation_updates: [
+              {
+                fact: seatFact.fact,
+                revised_fact: "Republicans hold 40 Senate seats.",
+                as_of: null,
+                extract_ids: ["hallucinated"],
+              },
+            ],
+          }),
+        ],
+      ]),
+    });
+
+    expect(await store.getTopicFacts(questionTopic.id)).toEqual([seatFact]);
+  });
+
+  it("still assesses when establishing the situation fails", async () => {
+    const store = createInMemoryExtractStore();
+    const llm: Llm = {
+      async structured() {
+        throw new Error("search unavailable");
+      },
+    };
+    const { persistence, state } = makeMemoryPersistence();
+
+    const result = await runReporter({
+      persistence,
+      store,
+      topic: questionTopic,
+      reportId: "report-q5",
+      llm,
+      modelProvider: fakeProvider([
+        [functionCall("get_new_extracts", {}, "c1")],
+        [questionFinal()],
+      ]),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(state.failed).toBeNull();
+    expect(state.completed?.sections.current_state).toBeUndefined();
+    expect(await store.getTopicFacts(questionTopic.id)).toEqual([]);
   });
 });

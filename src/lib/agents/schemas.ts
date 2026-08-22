@@ -147,6 +147,25 @@ export const QuestionVerdictSchema = z.object({
     .describe("The strongest drivers behind the verdict, each cited, most decisive first"),
 });
 
+/** One revision the Reporter may make to a standing state fact, from evidence. */
+export const SituationUpdateSchema = z.object({
+  fact: z
+    .string()
+    .describe("EXACTLY the existing fact text being revised, verbatim"),
+  revised_fact: z
+    .string()
+    .describe("The fact as it now stands, one sentence, specific"),
+  as_of: z
+    .string()
+    .nullable()
+    .describe("When the revised fact became true, YYYY-MM-DD, or null if unknown"),
+  extract_ids: z
+    .array(z.string())
+    .min(1)
+    .describe("The extracts that establish the change — never revise without evidence"),
+});
+export type SituationUpdate = z.infer<typeof SituationUpdateSchema>;
+
 export const FactorAssessmentDraftSchema = z.object({
   factor: z.string().describe("EXACT interest-frame factor name"),
   bullets: z
@@ -159,6 +178,11 @@ export const QuestionReporterFinalSchema = z.object({
   factor_assessments: z
     .array(FactorAssessmentDraftSchema)
     .describe("One entry per interest-frame factor with meaningful evidence"),
+  situation_updates: z
+    .array(SituationUpdateSchema)
+    .describe(
+      "Revisions to 'Where things stand' facts that the cited extracts prove have changed (e.g. a seat count after a special election). Empty when nothing changed. Never revise a rule.",
+    ),
   what_changed: z
     .array(CitedBulletSchema)
     .describe("What moved since the previous assessment; may cite nothing when purely narrative"),

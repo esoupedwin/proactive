@@ -1,11 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { normalizeUrl } from "../ai/dedupe";
+import { situationFacts } from "../types";
 import type {
   AgentName,
   AgentStateData,
   Assessment,
   AssessmentSignificance,
   ExtractRecord,
+  KnowledgeFact,
   ReportFeedback,
   SourceType,
   Topic,
@@ -79,6 +81,17 @@ export interface ExtractStore {
     topicId: string,
     limit?: number,
   ): Promise<FeedbackWithContext[]>;
+  /**
+   * The topic's standing facts (the kinded entries of topic_memory.facts);
+   * empty when none. Legacy kind-less facts are not returned.
+   */
+  getTopicFacts(topicId: string): Promise<KnowledgeFact[]>;
+  /**
+   * Replaces topic_memory.facts wholesale. The first save by this feature
+   * retires any legacy kind-less facts — they belonged to a pipeline that
+   * no longer runs.
+   */
+  saveTopicFacts(topic: Topic, facts: KnowledgeFact[]): Promise<void>;
 }
 
 /** Text embedded for an extract — keep in sync between create and search. */
@@ -291,6 +304,30 @@ export function createSupabaseExtractStore(
         report_summary: summaries.get(f.report_id) ?? null,
       }));
     },
+
+    async getTopicFacts(topicId) {
+      const { data } = await supabase
+        .from("topic_memory")
+        .select("facts")
+        .eq("topic_id", topicId)
+        .maybeSingle<{ facts: KnowledgeFact[] | null }>();
+      return situationFacts(data?.facts ?? []);
+    },
+
+    async saveTopicFacts(topic, facts) {
+      // topic_memory has one row per topic; the other columns are leftovers
+      // from the pre-agent pipeline and keep their defaults on first insert.
+      const { error } = await supabase.from("topic_memory").upsert(
+        {
+          topic_id: topic.id,
+          user_id: topic.user_id,
+          facts,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "topic_id" },
+      );
+      if (error) throw new Error(`saving topic facts failed: ${error.message}`);
+    },
   };
 }
 
@@ -303,11 +340,13 @@ export function createInMemoryExtractStore(): ExtractStore & {
   assessments: Assessment[];
   states: Map<string, AgentStateData>;
   feedback: FeedbackWithContext[];
+  facts: Map<string, KnowledgeFact[]>;
 } {
   const extracts: ExtractRecord[] = [];
   const assessments: Assessment[] = [];
   const states = new Map<string, AgentStateData>();
   const feedback: FeedbackWithContext[] = [];
+  const facts = new Map<string, KnowledgeFact[]>();
   let counter = 0;
 
   return {
@@ -315,6 +354,7 @@ export function createInMemoryExtractStore(): ExtractStore & {
     assessments,
     states,
     feedback,
+    facts,
 
     async hybridSearch(topicId, query, count = 8) {
       const words = query.toLowerCase().split(/\s+/).filter(Boolean);
@@ -427,6 +467,14 @@ export function createInMemoryExtractStore(): ExtractStore & {
         .filter((f) => f.topic_id === topicId)
         .sort((a, b) => b.created_at.localeCompare(a.created_at))
         .slice(0, limit);
+    },
+
+    async getTopicFacts(topicId) {
+      return situationFacts(facts.get(topicId) ?? []);
+    },
+
+    async saveTopicFacts(topic, next) {
+      facts.set(topic.id, next);
     },
   };
 }

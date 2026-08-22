@@ -1,7 +1,8 @@
 import { Agent, tool } from "@openai/agents";
 import type { TraceCollector } from "../../ai/trace";
-import type { DetailLevel, Topic } from "../../types";
+import type { DetailLevel, KnowledgeFact, Topic } from "../../types";
 import { renderAnalyticalQuestion, renderInterestFrame } from "../frame";
+import { renderSituation } from "./situation";
 import {
   EmptyParamsSchema,
   QuestionReporterFinalSchema,
@@ -79,6 +80,7 @@ export function reporterInstructions(
 export function questionReporterInstructions(
   topic: Topic,
   recentSubtopics: string[],
+  situation: KnowledgeFact[] = [],
 ): string {
   return [
     "You are the Reporter for Proactive, a personal research companion. This topic is configured to ANSWER A QUESTION: your job is to weigh ALL consolidated evidence against the interest frame and give the current best answer. A separate Info Tracker agent has already gathered extracts into the data store — you work from those extracts only.",
@@ -88,6 +90,7 @@ export function questionReporterInstructions(
     `Goal: ${topic.description}`,
     ...renderAnalyticalQuestion(topic),
     ...renderInterestFrame(topic.interest_frame),
+    ...renderSituation(situation),
     recentSubtopics.length > 0
       ? `Recently active subtopics: ${recentSubtopics.join(", ")}`
       : "",
@@ -102,6 +105,12 @@ export function questionReporterInstructions(
     "Assessment rules:",
     "- factor_assessments: one entry per frame factor that has meaningful evidence, using the EXACT factor name; answer the factor's key question from the evidence, cited. Skip factors with no evidence rather than padding.",
     "- verdict: the overall answer to the analytical question, following from the factor assessments. likelihood says how likely the questioned outcome is; confidence says how strongly the evidence supports the call; rationale lists the strongest drivers, cited, most decisive first.",
+    ...(situation.length > 0
+      ? [
+          "- Reason from the Situation: the verdict must reconcile what the outcome requires against where things stand and how the evidence moves that gap. Say it plainly when the arithmetic is decisive (e.g. a net change of N seats would flip control).",
+          "- situation_updates: when cited extracts PROVE a 'Where things stand' fact has changed, revise it — quote the existing fact verbatim and give the new one. Report a revision only on hard evidence of a change of state, never on speculation or forecast; leave the list empty otherwise. Rules are never revised.",
+        ]
+      : []),
     "- verdict.trend: 'baseline' when the input has no previous_verdict. Otherwise compare against previous_verdict: strengthened (same call, firmer), weakened (same call, shakier), reversed (the call flipped), or unchanged.",
     "- what_changed compares against the PREVIOUS assessment: which factors moved and why the verdict did or did not shift. For a baseline, state that this is the initial assessment.",
     "- Weigh evidence by source: news extracts for reported developments; Reddit is community sentiment (never verified fact); Medium is practitioner interpretation. Corroborated extracts count for more; contradictions must be surfaced, not averaged away.",
@@ -175,6 +184,8 @@ export function buildReporterAgent(options: {
   deps: ReporterToolDeps;
   model: string;
   recentSubtopics: string[];
+  /** Question mode: the standing facts the assessment rests on. */
+  situation?: KnowledgeFact[];
   trace?: TraceCollector;
 }) {
   const { deps, model, trace } = options;
@@ -186,7 +197,11 @@ export function buildReporterAgent(options: {
     model,
     instructions:
       mode === "question"
-        ? questionReporterInstructions(deps.topic, options.recentSubtopics)
+        ? questionReporterInstructions(
+            deps.topic,
+            options.recentSubtopics,
+            options.situation,
+          )
         : mode === "trending"
           ? trendingReporterInstructions(deps.topic, options.recentSubtopics)
           : reporterInstructions(deps.topic, options.recentSubtopics),

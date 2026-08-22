@@ -226,6 +226,17 @@ export function buildSpeechScript(options: {
         ...bulletsToProse(v.rationale),
       ]),
     );
+    // The standing facts the verdict rests on, so the spoken version carries
+    // the baseline too. Dates and the revised flag are visual — skip them.
+    const currentState = sections.current_state ?? [];
+    if (currentState.length > 0) {
+      parts.push(
+        ...section(
+          "Here's where things stand.",
+          currentState.map((f) => sentence(f.fact)),
+        ),
+      );
+    }
     for (const fa of sections.factor_assessments ?? []) {
       parts.push(
         ...section(

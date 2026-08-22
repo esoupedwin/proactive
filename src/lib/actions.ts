@@ -10,7 +10,7 @@ import { openAiLlm } from "./ai/openai";
 import { isGenerationLocked } from "./reports";
 import { SEED_TOPICS } from "./seed-data";
 import { createSupabaseServerClient } from "./supabase/server";
-import { frameFactorNames } from "./types";
+import { frameFactorNames, situationFacts } from "./types";
 import type {
   DetailLevel,
   Expert,
@@ -18,6 +18,7 @@ import type {
   ExpertKind,
   FeedbackRating,
   InterestFactor,
+  KnowledgeFact,
   MentorFocus,
   MentorLevel,
   MentorMemoryData,
@@ -640,6 +641,94 @@ export async function mentorTipFeedback(
     memory,
     updated_at: new Date().toISOString(),
   });
+}
+
+// ---------------------------------------------------------------------------
+// Situation facts (the Reporter's standing facts for a question topic)
+// ---------------------------------------------------------------------------
+
+/** Bounded like the other prompt-injected text — every fact rides in every run. */
+const FACT_TEXT_MAX = 300;
+
+async function loadTopicFacts(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  topicId: string,
+): Promise<KnowledgeFact[]> {
+  const { data } = await supabase
+    .from("topic_memory")
+    .select("facts")
+    .eq("topic_id", topicId)
+    .maybeSingle<{ facts: KnowledgeFact[] | null }>();
+  // The panel indexes into this same filtered list, so edits land on the
+  // right fact even when legacy kind-less entries sit alongside.
+  return situationFacts(data?.facts ?? []);
+}
+
+async function storeTopicFacts(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  topicId: string,
+  userId: string,
+  facts: KnowledgeFact[],
+): Promise<void> {
+  await supabase.from("topic_memory").upsert(
+    {
+      topic_id: topicId,
+      user_id: userId,
+      facts,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "topic_id" },
+  );
+  revalidatePath(`/topics/${topicId}`);
+}
+
+/**
+ * Corrects one fact's text in place (by index — facts have no ids). A
+ * corrected fact is marked as user-verified in its source note so the
+ * reporter's own revisions do not quietly overwrite what you fixed by hand.
+ */
+export async function updateTopicFact(
+  topicId: string,
+  index: number,
+  formData: FormData,
+): Promise<void> {
+  const { supabase, user } = await requireUser();
+  const facts = await loadTopicFacts(supabase, topicId);
+  const current = facts[index];
+  if (!current) return;
+
+  const text = parseBoundedText(formData.get("fact"), FACT_TEXT_MAX);
+  if (!text) return;
+  const asOf = parseBoundedText(formData.get("as_of"), 10);
+
+  facts[index] = {
+    ...current,
+    fact: text,
+    confidence: "high",
+    source_note: "Corrected by you",
+    ...(current.kind === "state" ? { as_of: asOf || null } : {}),
+  };
+  await storeTopicFacts(supabase, topicId, user.id, facts);
+}
+
+export async function deleteTopicFact(
+  topicId: string,
+  index: number,
+): Promise<void> {
+  const { supabase, user } = await requireUser();
+  const facts = await loadTopicFacts(supabase, topicId);
+  if (index < 0 || index >= facts.length) return;
+  facts.splice(index, 1);
+  await storeTopicFacts(supabase, topicId, user.id, facts);
+}
+
+/**
+ * Clears every fact so the next report establishes the situation afresh —
+ * the one way to make the reporter search again.
+ */
+export async function clearTopicFacts(topicId: string): Promise<void> {
+  const { supabase, user } = await requireUser();
+  await storeTopicFacts(supabase, topicId, user.id, []);
 }
 
 // ---------------------------------------------------------------------------

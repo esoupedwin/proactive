@@ -79,6 +79,7 @@ export async function GET(request: Request) {
       store: createSupabaseExtractStore(supabase, createOpenAiEmbedder(usage)),
       topic,
       reportId: report.id,
+      llm: createOpenAiLlm(usage, trace),
       usage,
       trace,
     });

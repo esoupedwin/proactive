@@ -115,6 +115,7 @@ export async function POST(
     store,
     topic,
     reportId: report.id,
+    llm: createOpenAiLlm(usage, trace),
     usage,
     trace,
   });

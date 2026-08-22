@@ -140,6 +140,15 @@ export interface TrendingItem {
 }
 
 /** Structured report body stored in reports.sections (jsonb). */
+/** One standing fact as shown in a report's Current state block. */
+export interface SituationFact {
+  fact: string;
+  kind: FactKind;
+  as_of: string | null;
+  /** True when this report revised the fact from new evidence. */
+  revised?: boolean;
+}
+
 export interface ReportSections {
   /** Optional cover image shown above Latest Developments. */
   hero_image?: HeroImage | null;
@@ -155,6 +164,12 @@ export interface ReportSections {
   verdict?: QuestionVerdict | null;
   /** Question mode only: per-factor assessments against the interest frame. */
   factor_assessments?: FactorAssessment[];
+  /**
+   * Question mode only: the standing facts the verdict rested on, as they
+   * were at this report. Not rendered on the briefing — kept as a record of
+   * the baseline behind each verdict (and spoken in the audio briefing).
+   */
+  current_state?: SituationFact[];
   /** Trending mode only: what's gaining attention, most traction first. */
   trending?: TrendingItem[];
 }
@@ -480,11 +495,34 @@ export interface TopicTheme {
   trend: string;
 }
 
+/**
+ * What kind of standing fact this is, which decides its lifetime:
+ * - "rule": structural and stable — the threshold for the outcome, how the
+ *   mechanism works ("218 seats controls the House"). Established once.
+ * - "state": the current position, which changes ("Republicans hold 53
+ *   Senate seats"). Carries an as-of date and gets revised from evidence.
+ */
+export type FactKind = "rule" | "state";
+
 export interface KnowledgeFact {
   fact: string;
   entities: string[];
   confidence: "high" | "medium" | "low";
   source_note: string;
+  /** Absent on facts from the pre-agent pipeline and seed data. */
+  kind?: FactKind;
+  /** State facts: when this was true, ISO date. Null for rules. */
+  as_of?: string | null;
+}
+
+/**
+ * The Reporter's standing facts are the kinded ones. Facts from the old
+ * pipeline and seed data have no kind — they are recorded developments, not
+ * a situation — and must never be mistaken for one, or a topic switched to
+ * question mode would skip establishing its real baseline.
+ */
+export function situationFacts(facts: KnowledgeFact[]): KnowledgeFact[] {
+  return facts.filter((f) => f.kind !== undefined);
 }
 
 export interface OpenQuestion {

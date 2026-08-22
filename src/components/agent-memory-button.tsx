@@ -1,9 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Brain, X } from "lucide-react";
+import { Brain, Pencil, Trash2, X } from "lucide-react";
+import {
+  clearTopicFacts,
+  deleteTopicFact,
+  updateTopicFact,
+} from "@/lib/actions";
 import { formatDateTime } from "@/lib/reports";
-import type { AgentStateData } from "@/lib/types";
+import type { AgentStateData, KnowledgeFact } from "@/lib/types";
+import { SubmitButton } from "./submit-button";
+import { Input } from "./ui";
 
 /**
  * Shows what the two agents currently remember about this topic:
@@ -11,11 +18,16 @@ import type { AgentStateData } from "@/lib/types";
  * "where it stopped" cursor. Data is fetched server-side by the page.
  */
 export function AgentMemoryButton({
+  topicId,
   tracker,
   reporter,
+  facts = null,
 }: {
+  topicId: string;
   tracker: AgentStateData | null;
   reporter: AgentStateData | null;
+  /** Question topics: the Reporter's standing facts. Null for other modes. */
+  facts?: KnowledgeFact[] | null;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -28,7 +40,7 @@ export function AgentMemoryButton({
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
 
-  const empty = !tracker && !reporter;
+  const empty = !tracker && !reporter && !facts?.length;
 
   return (
     <>
@@ -92,6 +104,9 @@ export function AgentMemoryButton({
                     state={reporter}
                     showCursor
                   />
+                  {facts !== null && (
+                    <FactsSection topicId={topicId} facts={facts} />
+                  )}
                 </div>
               )}
             </div>
@@ -99,6 +114,133 @@ export function AgentMemoryButton({
         </div>
       )}
     </>
+  );
+}
+
+/**
+ * The Reporter's standing facts for a question topic, with a way to fix a
+ * wrong one. Editing is per row; the agent owns these but a bad seat count
+ * would skew every verdict until corrected.
+ */
+function FactsSection({
+  topicId,
+  facts,
+}: {
+  topicId: string;
+  facts: KnowledgeFact[];
+}) {
+  const [editing, setEditing] = useState<number | null>(null);
+
+  // Close the editor once the save lands (the page re-renders with new facts).
+  useEffect(() => setEditing(null), [facts]);
+
+  return (
+    <section>
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-soft">
+        Standing facts
+      </h3>
+      <p className="mt-0.5 text-xs text-ink-faint">
+        What the outcome requires and where things stand — established once
+        by a web search, then revised only from report evidence.
+      </p>
+
+      {facts.length === 0 ? (
+        <p className="mt-2 text-sm text-ink-faint">
+          None yet — the next report establishes them.
+        </p>
+      ) : (
+        <ul className="mt-2 divide-y divide-rule">
+          {facts.map((fact, index) =>
+            editing === index ? (
+              <li key={index} className="py-2">
+                <form
+                  action={updateTopicFact.bind(null, topicId, index)}
+                  className="space-y-2"
+                >
+                  <Input
+                    name="fact"
+                    defaultValue={fact.fact}
+                    maxLength={300}
+                    aria-label="Fact"
+                    autoFocus
+                  />
+                  {(fact.kind ?? "state") === "state" && (
+                    <Input
+                      name="as_of"
+                      type="date"
+                      defaultValue={fact.as_of ?? ""}
+                      aria-label="As of date"
+                    />
+                  )}
+                  <div className="flex items-center gap-2">
+                    <SubmitButton variant="outline" pendingLabel="Saving…">
+                      Save
+                    </SubmitButton>
+                    <button
+                      type="button"
+                      onClick={() => setEditing(null)}
+                      className="min-h-9 rounded-md px-3 text-sm text-ink-soft hover:bg-neutral-100"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              </li>
+            ) : (
+              <li key={index} className="flex items-start gap-2 py-2 text-sm">
+                <span className="min-w-0 flex-1 leading-relaxed">
+                  <span className="mr-1.5 rounded-full border border-rule bg-neutral-50 px-1.5 py-px text-[10px] font-medium uppercase tracking-wide text-ink-faint">
+                    {fact.kind ?? "state"}
+                  </span>
+                  {fact.fact}
+                  {fact.as_of && (
+                    <span className="ml-1 text-xs text-ink-faint">
+                      as of {fact.as_of}
+                    </span>
+                  )}
+                  {fact.confidence !== "high" && (
+                    <span className="ml-1 text-xs text-ink-faint">
+                      · {fact.confidence} confidence
+                    </span>
+                  )}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setEditing(index)}
+                  aria-label="Edit fact"
+                  title="Edit"
+                  className="shrink-0 rounded-md p-1.5 text-ink-faint hover:bg-neutral-100 hover:text-ink"
+                >
+                  <Pencil className="size-3.5" aria-hidden />
+                </button>
+                <form action={deleteTopicFact.bind(null, topicId, index)}>
+                  <button
+                    type="submit"
+                    aria-label="Delete fact"
+                    title="Delete"
+                    className="shrink-0 rounded-md p-1.5 text-ink-faint hover:bg-neutral-100 hover:text-red-700"
+                  >
+                    <Trash2 className="size-3.5" aria-hidden />
+                  </button>
+                </form>
+              </li>
+            ),
+          )}
+        </ul>
+      )}
+
+      {facts.length > 0 && (
+        <form action={clearTopicFacts.bind(null, topicId)} className="mt-3">
+          <SubmitButton
+            variant="ghost"
+            pendingLabel="Clearing…"
+            confirm="Clear all standing facts? The next report will search the web again to re-establish them."
+          >
+            Re-establish on next report
+          </SubmitButton>
+        </form>
+      )}
+    </section>
   );
 }
 

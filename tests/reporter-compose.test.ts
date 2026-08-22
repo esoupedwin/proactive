@@ -158,6 +158,7 @@ function questionFinal(
     factor_assessments: [
       { factor: "Political Incentives", bullets: [{ text: "f1", extract_ids: ["b"] }] },
     ],
+    situation_updates: [],
     what_changed: [],
     no_meaningful_change: false,
     summary: "sum",

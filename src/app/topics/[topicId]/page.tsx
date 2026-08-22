@@ -24,7 +24,7 @@ import {
 } from "@/lib/reports";
 import { keyEntitiesFromMemory } from "@/lib/entities";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { isTopicUnread } from "@/lib/types";
+import { isTopicUnread, situationFacts } from "@/lib/types";
 import type {
   AgentStateData,
   Expert,
@@ -252,7 +252,16 @@ export default async function TopicBriefingPage({
             <Layers className="size-5" aria-hidden />
           </LinkPending>
         </Link>
-        <AgentMemoryButton tracker={trackerMemory} reporter={reporterMemory} />
+        <AgentMemoryButton
+          topicId={topic.id}
+          tracker={trackerMemory}
+          reporter={reporterMemory}
+          facts={
+            topic.watch_mode === "question"
+              ? situationFacts(memory?.facts ?? [])
+              : null
+          }
+        />
       </div>
 
       {generating && newest && (
