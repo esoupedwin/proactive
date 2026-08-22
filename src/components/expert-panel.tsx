@@ -1,12 +1,20 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
-import { Check, ExternalLink, RefreshCw, RotateCcw, Users } from "lucide-react";
+import { useRef, useState, useTransition } from "react";
+import {
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  ExternalLink,
+  RefreshCw,
+  RotateCcw,
+  Users,
+} from "lucide-react";
 import { mentorTipFeedback } from "@/lib/actions";
 import { ExpertIcon } from "@/lib/expert-kinds";
 import { linkBadgeLabel, splitMarkdownLinks } from "@/lib/md-links";
-import { formatTokens, formatUsdDetailed } from "@/lib/reports";
+import { formatTokens, formatUsdDetailed, paginate } from "@/lib/reports";
 import {
   isAnalystCommentary,
   type AnalystAnalysis,
@@ -454,8 +462,9 @@ function PersonalityBody({ personality }: { personality: PersonalityOutput }) {
       );
     }
     return (
-      <ul className="divide-y divide-rule">
-        {profiles.map((profile) => (
+      <PagedPeople
+        people={profiles}
+        renderPerson={(profile) => (
           <PersonCard key={profile.name} person={profile}>
             <CommentaryWithLinkBadges text={profile.who} />
             <p className="mt-1.5 text-sm leading-relaxed text-ink-soft">
@@ -463,8 +472,8 @@ function PersonalityBody({ personality }: { personality: PersonalityOutput }) {
               <CommentaryWithLinkBadges text={profile.relevance} inline />
             </p>
           </PersonCard>
-        ))}
-      </ul>
+        )}
+      />
     );
   }
 
@@ -482,8 +491,9 @@ function PersonalityBody({ personality }: { personality: PersonalityOutput }) {
           No key players identified yet.
         </p>
       ) : (
-        <ul className="divide-y divide-rule">
-          {stances.map((stance) => (
+        <PagedPeople
+          people={stances}
+          renderPerson={(stance) => (
             <PersonCard
               key={stance.name}
               person={stance}
@@ -512,10 +522,100 @@ function PersonalityBody({ personality }: { personality: PersonalityOutput }) {
                 </p>
               )}
             </PersonCard>
-          ))}
-        </ul>
+          )}
+        />
       )}
     </div>
+  );
+}
+
+/**
+ * A roster can run to eight people, each with a portrait and two paragraphs —
+ * far more than fits under a briefing. Show them a page at a time.
+ */
+const PEOPLE_PER_PAGE = 4;
+
+function PagedPeople<T>({
+  people,
+  renderPerson,
+}: {
+  people: T[];
+  /** Must set a key on the returned element, as in a plain map. */
+  renderPerson: (person: T) => React.ReactNode;
+}) {
+  const [requested, setRequested] = useState(1);
+  const listRef = useRef<HTMLUListElement>(null);
+
+  // `paginate` clamps for us, so a re-run that shrinks the roster under a
+  // reader parked on the last page falls back to a page that still exists.
+  const { page, totalPages, from, to } = paginate(
+    people.length,
+    requested,
+    PEOPLE_PER_PAGE,
+  );
+  const shown = people.slice(from, to + 1);
+
+  function goTo(next: number) {
+    setRequested(next);
+    // Page 2 of a long list would otherwise open scrolled to its middle.
+    listRef.current?.scrollIntoView({ block: "nearest" });
+  }
+
+  return (
+    <div>
+      <ul ref={listRef} className="divide-y divide-rule">
+        {shown.map(renderPerson)}
+      </ul>
+      {totalPages > 1 && (
+        <nav
+          aria-label="More people"
+          className="flex items-center justify-between border-t border-rule px-4 py-2"
+        >
+          <PageButton
+            onClick={() => goTo(page - 1)}
+            disabled={page === 1}
+            label="Previous people"
+          >
+            <ChevronLeft className="size-4" aria-hidden />
+          </PageButton>
+          <p aria-live="polite" className="text-xs text-ink-faint">
+            {from + 1}–{from + shown.length} of {people.length}
+          </p>
+          <PageButton
+            onClick={() => goTo(page + 1)}
+            disabled={page === totalPages}
+            label="More people"
+          >
+            <ChevronRight className="size-4" aria-hidden />
+          </PageButton>
+        </nav>
+      )}
+    </div>
+  );
+}
+
+function PageButton({
+  onClick,
+  disabled,
+  label,
+  children,
+}: {
+  onClick: () => void;
+  disabled: boolean;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      title={label}
+      className="inline-flex size-8 items-center justify-center rounded-md border border-rule text-ink-faint hover:bg-neutral-100 hover:text-ink disabled:opacity-40 disabled:hover:bg-transparent"
+    >
+      {children}
+    </button>
   );
 }
 
