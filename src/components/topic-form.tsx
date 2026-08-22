@@ -183,7 +183,7 @@ export function TopicForm({
         <Field
           label="How should Proactive watch this?"
           htmlFor="watch_mode"
-          info="Monitor keeps you up to date with a classic briefing. Answer a question makes every report an assessment: findings are weighed against the interest frame to answer your analytical question. Track what's trending maps where public attention is going — what's gaining traction across news, Reddit, and Medium, the mood around it, and a talking point for each — so you can easily converse about the topic."
+          info="Monitor keeps you up to date with a classic briefing. Answer a question makes every report an assessment: findings are weighed against the key factors to answer your analytical question. Track what's trending maps where public attention is going — what's gaining traction across news, Reddit, and Medium, the mood around it, and a talking point for each — so you can easily converse about the topic."
         >
           <Select
             id="watch_mode"
@@ -203,7 +203,7 @@ export function TopicForm({
             htmlFor="analytical_question"
             error={state.fieldErrors?.analytical_question}
             hint="A yes/no or outcome question the reports should keep answering."
-            info="Each report assesses the consolidated findings against the interest frame and gives a current answer to this question, with a verdict that is tracked over time."
+            info="Each report assesses the consolidated findings against the key factors and gives a current answer to this question, with a verdict that is tracked over time."
           >
             <Input
               id="analytical_question"
@@ -216,11 +216,11 @@ export function TopicForm({
         )}
 
         <Field
-          label="Interest frame"
+          label="Key factors"
           htmlFor="factor_name_0"
           error={state.fieldErrors?.interest_frame}
           hint={`The factors that drive this topic, up to ${MAX_FACTORS}. Key question and indicators are optional but sharpen the search.`}
-          info="The analytical frame for this topic. Each factor names an angle to track; its key question says what the factor should answer, and its indicators are the observable evidence to watch. The tracker searches along these factors and tags findings with them."
+          info="The analytical lens for this topic. Each factor names an angle to track; its key question says what the factor should answer, and its indicators are the observable evidence to watch. The tracker searches along these factors and tags findings with them."
         >
           <div className="space-y-3">
             {factors.map((factor, index) => (
@@ -291,7 +291,7 @@ export function TopicForm({
                   ) : (
                     <Sparkles className="size-4" aria-hidden />
                   )}
-                  Suggest frame
+                  Suggest factors
                 </button>
               </div>
               <span

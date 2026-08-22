@@ -123,7 +123,7 @@ export function TopicRow({ topic }: { topic: Topic }) {
           )}
           {topic.interest_frame.length > 0 && (
             <>
-              <p className="mt-3 font-semibold">Interest frame:</p>
+              <p className="mt-3 font-semibold">Key factors:</p>
               <ul className="mt-1 list-inside list-disc space-y-0.5 text-ink-soft">
                 {topic.interest_frame.map((factor) => (
                   <li key={factor.name}>

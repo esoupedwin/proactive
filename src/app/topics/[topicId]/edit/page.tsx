@@ -42,7 +42,7 @@ export default async function EditTopicPage({
           <p className="mt-1 text-xs leading-relaxed text-ink-soft">
             Deletes every report, source, extract and memory this topic has
             accumulated, and starts it afresh. Its settings above — title, goal,
-            interest frame, schedule — and its experts and their specializations
+            key factors, schedule — and its experts and their specializations
             are kept. This cannot be undone.
           </p>
           {error === "generating" && (

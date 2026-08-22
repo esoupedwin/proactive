@@ -327,6 +327,10 @@ function QuestionReportView({
   entities: string[];
   question?: string | null;
 }) {
+  const assessed = (sections.factor_assessments ?? []).filter(
+    (fa) => fa.bullets.length > 0,
+  );
+
   return (
     <div className="space-y-7">
       {sections.no_meaningful_change && (
@@ -375,15 +379,28 @@ function QuestionReportView({
         )}
       </section>
 
-      {(sections.factor_assessments ?? []).map((fa) => (
-        <Section
-          key={fa.factor}
-          title={fa.factor}
-          bullets={fa.bullets}
-          sources={sources}
-          entities={entities}
-        />
-      ))}
+      {/* Factors that produced no evidence render nothing, so count the ones
+          that will actually appear before heading the group. */}
+      {assessed.length > 0 && (
+        <section aria-label="Key factors">
+          {/* Larger and mixed-case, so it reads as the group label above the
+              uppercase factor headings rather than as another peer section. */}
+          <h2 className="mb-4 text-base font-bold tracking-tight">
+            {assessed.length === 1 ? "Key Factor" : "Key Factors"}
+          </h2>
+          <div className="space-y-7">
+            {assessed.map((fa) => (
+              <Section
+                key={fa.factor}
+                title={fa.factor}
+                bullets={fa.bullets}
+                sources={sources}
+                entities={entities}
+              />
+            ))}
+          </div>
+        </section>
+      )}
 
       <Section
         title="What Changed"

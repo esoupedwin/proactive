@@ -55,7 +55,7 @@ const topicInputSchema = z
       .min(10, "Describe what you want to understand (at least 10 characters)."),
     interest_frame: z
       .array(interestFactorSchema)
-      .min(1, "Add at least one factor to the interest frame.")
+      .min(1, "Add at least one key factor.")
       .max(10, "Keep it to 10 factors or fewer."),
     watch_mode: z.enum(["monitor", "question", "trending"]),
     analytical_question: z.string().trim().max(300),
@@ -213,9 +213,12 @@ export async function updateTopic(
 }
 
 /**
- * Drafts an Interest Frame from the topic's title/goal (and analytical
- * question, if any) for the form's "Suggest frame" button. The user edits
- * the draft before saving — nothing is persisted here.
+ * Drafts a topic's key factors from its title/goal (and analytical question,
+ * if any) for the form's "Suggest factors" button. The user edits the draft
+ * before saving — nothing is persisted here.
+ *
+ * Named for the `interest_frame` column it fills; "Key factors" is what the
+ * UI calls it.
  */
 export async function draftInterestFrame(input: {
   title: string;
@@ -237,7 +240,7 @@ export async function draftInterestFrame(input: {
     return { factors };
   } catch (err) {
     console.error("interest frame drafting failed", err);
-    return { error: "Could not draft a frame. Add factors manually or retry." };
+    return { error: "Could not draft factors. Add them manually or retry." };
   }
 }
 
