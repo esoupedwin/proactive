@@ -7,6 +7,7 @@ import { RefreshCw } from "lucide-react";
 import { formatElapsed, formatUsageSummary } from "@/lib/reports";
 import type { ReportUsage } from "@/lib/types";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { GenerationToast } from "./generation-toast";
 import { Button, Spinner } from "./ui";
 
 type GenerateState = "idle" | "loading" | "success" | "error";
@@ -153,32 +154,11 @@ export function GenerateButton({
       )}
 
       {state === "loading" && (
-        /* Sticky above the bottom nav (h-14) so it stays visible while
-           scrolling without covering the navigation. */
-        <div
-          data-no-capture
-          className="pointer-events-none fixed inset-x-0 bottom-14 z-40 mx-auto w-full max-w-md px-3 pb-2"
-        >
-          {/* Inverted against the page — ink background, paper text — so the
-              live status reads as an overlay rather than page content. */}
-          <div
-            role="status"
-            aria-live="polite"
-            className="pointer-events-auto rounded-md border border-ink bg-ink px-4 py-3 text-paper shadow-lg"
-          >
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-sm font-medium">{stage}…</p>
-              <p className="font-mono text-sm tabular-nums text-paper/70">
-                {formatElapsed(elapsedMs)}
-              </p>
-            </div>
-            <p className="mt-1.5 text-xs leading-relaxed text-paper/60">
-              Proactive plans queries, searches news → Reddit → Medium,
-              extracts and deduplicates findings, then writes your briefing.
-              Typically 1–3 minutes.
-            </p>
-          </div>
-        </div>
+        <GenerationToast stage={stage} elapsedMs={elapsedMs}>
+          Proactive plans queries, searches news → Reddit → Medium, extracts
+          and deduplicates findings, then writes your briefing. Typically 1–3
+          minutes.
+        </GenerationToast>
       )}
 
       {message && state !== "loading" && (
