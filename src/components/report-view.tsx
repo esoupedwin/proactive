@@ -41,6 +41,65 @@ function RichText({ text, entities }: { text: string; entities: string[] }) {
   );
 }
 
+/**
+ * The report's hero image with its credit resolved from the cited source.
+ * Renders nothing when the reporter chose no image.
+ */
+function ReportHero({
+  sections,
+  sources,
+}: {
+  sections: ReportSections;
+  sources: Source[];
+}) {
+  const hero = sections.hero_image;
+  if (!hero) return null;
+  const source =
+    hero.source_ref >= 0 && hero.source_ref < sources.length
+      ? sources[hero.source_ref]!
+      : null;
+  return (
+    <HeroImage
+      url={hero.url}
+      alt={hero.alt}
+      description={
+        hero.description ?? (source ? `From “${source.title}”` : null)
+      }
+      credit={source ? (source.publisher ?? source.title) : null}
+      creditUrl={source?.url ?? null}
+    />
+  );
+}
+
+/** The briefing's bullet style: a dot, rich text, and superscript citations. */
+function Bullets({
+  bullets,
+  sources,
+  entities,
+  className = "space-y-2.5",
+}: {
+  bullets: ReportBullet[];
+  sources: Source[];
+  entities: string[];
+  className?: string;
+}) {
+  return (
+    <ul className={className}>
+      {bullets.map((bullet, i) => (
+        <li key={i} className="flex gap-2 text-[15px] leading-relaxed">
+          <span aria-hidden className="select-none text-ink-faint">
+            •
+          </span>
+          <span>
+            <RichText text={bullet.text} entities={entities} />
+            <SourceRefs refs={bullet.source_refs} sources={sources} />
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /** Renders one structured report in the editorial briefing style. */
 export function ReportView({
   sections,
@@ -97,43 +156,21 @@ export function ReportView({
     );
   }
 
-  const hero = sections.hero_image;
-  const heroSource =
-    hero && hero.source_ref >= 0 && hero.source_ref < sources.length
-      ? sources[hero.source_ref]!
-      : null;
+  const takeaways = takeawayPoints(sections.cross_source_takeaway);
 
   return (
     <div className="space-y-7">
-      {hero && (
-        <HeroImage
-          url={hero.url}
-          alt={hero.alt}
-          description={
-            hero.description ??
-            (heroSource ? `From “${heroSource.title}”` : null)
-          }
-          credit={heroSource ? (heroSource.publisher ?? heroSource.title) : null}
-          creditUrl={heroSource?.url ?? null}
-        />
-      )}
-      {takeawayPoints(sections.cross_source_takeaway).length > 0 && (
+      <ReportHero sections={sections} sources={sources} />
+      {takeaways.length > 0 && (
         <section aria-label="Overall Takeaway">
           <h2 className="mb-2 border-b border-rule pb-1 text-sm font-bold uppercase tracking-wide">
             Overall Takeaway
           </h2>
-          <ul className="space-y-2.5">
-            {takeawayPoints(sections.cross_source_takeaway).map((point, i) => (
-              <li key={i} className="flex gap-2 text-[15px] leading-relaxed">
-                <span aria-hidden className="select-none text-ink-faint">
-                  •
-                </span>
-                <span>
-                  <RichText text={point} entities={entities} />
-                </span>
-              </li>
-            ))}
-          </ul>
+          <Bullets
+            bullets={takeaways.map((text) => ({ text, source_refs: [] }))}
+            sources={sources}
+            entities={entities}
+          />
         </section>
       )}
       <Section
@@ -216,12 +253,6 @@ function TrendingReportView({
   sources: Source[];
   entities: string[];
 }) {
-  const hero = sections.hero_image;
-  const heroSource =
-    hero && hero.source_ref >= 0 && hero.source_ref < sources.length
-      ? sources[hero.source_ref]!
-      : null;
-
   return (
     <div className="space-y-7">
       {sections.no_meaningful_change && (
@@ -230,17 +261,8 @@ function TrendingReportView({
         </p>
       )}
 
-      {hero && !sections.no_meaningful_change && (
-        <HeroImage
-          url={hero.url}
-          alt={hero.alt}
-          description={
-            hero.description ??
-            (heroSource ? `From “${heroSource.title}”` : null)
-          }
-          credit={heroSource ? (heroSource.publisher ?? heroSource.title) : null}
-          creditUrl={heroSource?.url ?? null}
-        />
+      {!sections.no_meaningful_change && (
+        <ReportHero sections={sections} sources={sources} />
       )}
 
       {items.map((item, index) => (
@@ -265,19 +287,12 @@ function TrendingReportView({
             </p>
           )}
           {item.bullets.length > 0 && (
-            <ul className="mt-3 space-y-2.5">
-              {item.bullets.map((bullet, i) => (
-                <li key={i} className="flex gap-2 text-[15px] leading-relaxed">
-                  <span aria-hidden className="select-none text-ink-faint">
-                    •
-                  </span>
-                  <span>
-                    <RichText text={bullet.text} entities={entities} />
-                    <SourceRefs refs={bullet.source_refs} sources={sources} />
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <Bullets
+              bullets={item.bullets}
+              sources={sources}
+              entities={entities}
+              className="mt-3 space-y-2.5"
+            />
           )}
           {item.talking_point && (
             <p className="mt-3 rounded-md bg-neutral-50 px-3 py-2 text-sm leading-relaxed text-ink-soft">
@@ -312,12 +327,6 @@ function QuestionReportView({
   entities: string[];
   question?: string | null;
 }) {
-  const hero = sections.hero_image;
-  const heroSource =
-    hero && hero.source_ref >= 0 && hero.source_ref < sources.length
-      ? sources[hero.source_ref]!
-      : null;
-
   return (
     <div className="space-y-7">
       {sections.no_meaningful_change && (
@@ -327,17 +336,8 @@ function QuestionReportView({
         </p>
       )}
 
-      {hero && !sections.no_meaningful_change && (
-        <HeroImage
-          url={hero.url}
-          alt={hero.alt}
-          description={
-            hero.description ??
-            (heroSource ? `From “${heroSource.title}”` : null)
-          }
-          credit={heroSource ? (heroSource.publisher ?? heroSource.title) : null}
-          creditUrl={heroSource?.url ?? null}
-        />
+      {!sections.no_meaningful_change && (
+        <ReportHero sections={sections} sources={sources} />
       )}
 
       <section
@@ -366,19 +366,12 @@ function QuestionReportView({
           </span>
         </div>
         {verdict.rationale.length > 0 && (
-          <ul className="mt-4 space-y-2.5">
-            {verdict.rationale.map((bullet, i) => (
-              <li key={i} className="flex gap-2 text-[15px] leading-relaxed">
-                <span aria-hidden className="select-none text-ink-faint">
-                  •
-                </span>
-                <span>
-                  <RichText text={bullet.text} entities={entities} />
-                  <SourceRefs refs={bullet.source_refs} sources={sources} />
-                </span>
-              </li>
-            ))}
-          </ul>
+          <Bullets
+            bullets={verdict.rationale}
+            sources={sources}
+            entities={entities}
+            className="mt-4 space-y-2.5"
+          />
         )}
       </section>
 
@@ -419,19 +412,7 @@ function Section({
       <h2 className="mb-2 border-b border-rule pb-1 text-sm font-bold uppercase tracking-wide">
         {title}
       </h2>
-      <ul className="space-y-2.5">
-        {bullets.map((bullet, i) => (
-          <li key={i} className="flex gap-2 text-[15px] leading-relaxed">
-            <span aria-hidden className="select-none text-ink-faint">
-              •
-            </span>
-            <span>
-              <RichText text={bullet.text} entities={entities} />
-              <SourceRefs refs={bullet.source_refs} sources={sources} />
-            </span>
-          </li>
-        ))}
-      </ul>
+      <Bullets bullets={bullets} sources={sources} entities={entities} />
     </section>
   );
 }

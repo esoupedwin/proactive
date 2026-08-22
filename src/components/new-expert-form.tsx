@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Bot, Landmark, MessagesSquare, Users } from "lucide-react";
-import type { PersonalityMode } from "@/lib/types";
+import { EXPERT_KINDS, ExpertIcon } from "@/lib/expert-kinds";
+import type { ExpertKind, PersonalityMode } from "@/lib/types";
 import { MarkdownTextarea } from "./markdown-textarea";
 import { SubmitButton } from "./submit-button";
 import { Field, Input, Select } from "./ui";
 
-type ExpertKindChoice = "mentor" | "analyst" | "sentiment" | "personality";
+type ExpertKindChoice = ExpertKind;
 
 /**
  * Two-step add-expert flow: pick the expert type, then fill in its details.
@@ -45,11 +45,10 @@ export function NewExpertForm({
         </legend>
         <div className="grid auto-rows-fr grid-cols-2 gap-4" role="radiogroup">
           <TypeCard
+            kind="mentor"
             selected={kind === "mentor"}
             disabled={mentorExists}
             onSelect={() => setKind("mentor")}
-            icon={<Bot className="size-5" aria-hidden />}
-            title="Mentor"
             description={
               mentorExists
                 ? "Already on this topic — one Mentor per topic."
@@ -57,18 +56,16 @@ export function NewExpertForm({
             }
           />
           <TypeCard
+            kind="analyst"
             selected={kind === "analyst"}
             onSelect={() => setKind("analyst")}
-            icon={<Landmark className="size-5" aria-hidden />}
-            title="Analyst"
             description="An independent commentator that reads each report through a specialization you choose."
           />
           <TypeCard
+            kind="sentiment"
             selected={kind === "sentiment"}
             disabled={sentimentExists}
             onSelect={() => setKind("sentiment")}
-            icon={<MessagesSquare className="size-5" aria-hidden />}
-            title="Sentiment"
             description={
               sentimentExists
                 ? "Already on this topic — one Sentiment reader per topic."
@@ -76,10 +73,9 @@ export function NewExpertForm({
             }
           />
           <TypeCard
+            kind="personality"
             selected={kind === "personality"}
             onSelect={() => setKind("personality")}
-            icon={<Users className="size-5" aria-hidden />}
-            title="Personality"
             description="Studies the people behind the topic — tracks key players' stances on an issue, or profiles who's mentioned in each report."
           />
         </div>
@@ -233,18 +229,16 @@ export function NewExpertForm({
 }
 
 function TypeCard({
+  kind,
   selected,
   disabled,
   onSelect,
-  icon,
-  title,
   description,
 }: {
+  kind: ExpertKindChoice;
   selected: boolean;
   disabled?: boolean;
   onSelect: () => void;
-  icon: React.ReactNode;
-  title: string;
   description: string;
 }) {
   return (
@@ -264,9 +258,11 @@ function TypeCard({
         aria-hidden
         className="flex size-10 items-center justify-center rounded-full border border-rule bg-neutral-50"
       >
-        {icon}
+        <ExpertIcon kind={kind} />
       </span>
-      <span className="mt-3 text-base font-bold">{title}</span>
+      <span className="mt-3 text-base font-bold">
+        {EXPERT_KINDS[kind].title}
+      </span>
       <span className="mt-1 text-xs leading-relaxed text-ink-faint">
         {description}
       </span>

@@ -1,13 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import {
-  ArrowRight,
-  Bot,
-  ChevronLeft,
-  Landmark,
-  MessagesSquare,
-  Users,
-} from "lucide-react";
+import { ArrowRight, ChevronLeft } from "lucide-react";
 import { LinkPending } from "@/components/link-pending";
 import { Markdown } from "@/components/markdown";
 import { MarkdownTextarea } from "@/components/markdown-textarea";
@@ -20,6 +13,11 @@ import {
   updateMentorSettings,
   updatePersonalitySettings,
 } from "@/lib/actions";
+import {
+  ExpertIcon,
+  removeExpertConfirm,
+  removeExpertNote,
+} from "@/lib/expert-kinds";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Expert } from "@/lib/types";
 
@@ -38,6 +36,22 @@ const FOCUS_OPTIONS = [
     label: "People & organisations — who they are and how they relate",
   },
 ];
+
+/** What this expert does, in the page header. */
+function expertBlurb(expert: Expert): string {
+  switch (expert.kind) {
+    case "analyst":
+      return "An independent read of each report through your chosen lens — short commentary that refines or challenges the briefing.";
+    case "sentiment":
+      return "Searches Reddit for public reaction to each report's main points and reads the prevailing mood.";
+    case "personality":
+      return expert.config.personality_mode === "profiles"
+        ? "Profiles the people mentioned in each report — who they are, their affiliations, and what they did — fact-checked via web search."
+        : "Tracks the key players on one issue: a web-scanned baseline of who they are and where they stand, then how each stance moves over time.";
+    case "mentor":
+      return "Explains key concepts, entities, and relationships in each report. Remembers what you already know.";
+  }
+}
 
 /** Manage one expert: settings, pause/resume, remove. */
 export default async function ExpertDetailPage({
@@ -75,31 +89,13 @@ export default async function ExpertDetailPage({
             aria-hidden
             className="flex size-10 shrink-0 items-center justify-center rounded-full border border-rule bg-neutral-50"
           >
-            {expert.kind === "analyst" ? (
-              <Landmark className="size-5" />
-            ) : expert.kind === "sentiment" ? (
-              <MessagesSquare className="size-5" />
-            ) : expert.kind === "personality" ? (
-              <Users className="size-5" />
-            ) : (
-              <Bot className="size-5" />
-            )}
+            <ExpertIcon kind={expert.kind} />
           </span>
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-2xl font-bold tracking-tight">
               {expert.name}
             </h1>
-            <p className="text-xs text-ink-faint">
-              {expert.kind === "analyst"
-                ? "An independent read of each report through your chosen lens — short commentary that refines or challenges the briefing."
-                : expert.kind === "sentiment"
-                  ? "Searches Reddit for public reaction to each report's main points and reads the prevailing mood."
-                  : expert.kind === "personality"
-                    ? expert.config.personality_mode === "profiles"
-                      ? "Profiles the people mentioned in each report — who they are, their affiliations, and what they did — fact-checked via web search."
-                      : "Tracks the key players on one issue: a web-scanned baseline of who they are and where they stand, then how each stance moves over time."
-                    : "Explains key concepts, entities, and relationships in each report. Remembers what you already know."}
-            </p>
+            <p className="text-xs text-ink-faint">{expertBlurb(expert)}</p>
           </div>
           <Badge tone={expert.status === "active" ? "active" : "paused"}>
             {expert.status}
@@ -261,15 +257,7 @@ export default async function ExpertDetailPage({
             <SubmitButton
               variant="danger"
               pendingLabel="Removing…"
-              confirm={
-                isAnalyst
-                  ? `Remove ${expert.name}? Its commentary on this topic's reports will be deleted too.`
-                  : expert.kind === "sentiment"
-                    ? `Remove ${expert.name}? Its sentiment readings on this topic's reports will be deleted too.`
-                    : expert.kind === "personality"
-                      ? `Remove ${expert.name}? Its tracked people and stance history for this topic will be deleted too.`
-                      : "Remove Mentor? What it remembers teaching you for this topic will be deleted too."
-              }
+              confirm={removeExpertConfirm(expert)}
             >
               Remove {expert.name}
             </SubmitButton>
@@ -277,13 +265,7 @@ export default async function ExpertDetailPage({
         </div>
         <p className="text-xs text-ink-faint">
           {expert.status === "active"
-            ? isAnalyst
-              ? `Removing ${expert.name} also deletes its commentary on this topic's reports.`
-              : expert.kind === "sentiment"
-                ? `Removing ${expert.name} also deletes its sentiment readings on this topic's reports.`
-                : expert.kind === "personality"
-                  ? `Removing ${expert.name} also deletes its tracked people and their stance history for this topic.`
-                  : "Removing Mentor also deletes what it remembers teaching you for this topic."
+            ? removeExpertNote(expert)
             : `While paused, ${expert.name} skips new reports and its section is hidden from the briefing.`}
         </p>
         <Link

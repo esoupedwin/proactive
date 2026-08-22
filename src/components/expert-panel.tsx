@@ -2,17 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import {
-  Bot,
-  Check,
-  ExternalLink,
-  Landmark,
-  MessagesSquare,
-  RefreshCw,
-  RotateCcw,
-  Users,
-} from "lucide-react";
+import { Check, ExternalLink, RefreshCw, RotateCcw, Users } from "lucide-react";
 import { mentorTipFeedback } from "@/lib/actions";
+import { ExpertIcon } from "@/lib/expert-kinds";
 import { linkBadgeLabel, splitMarkdownLinks } from "@/lib/md-links";
 import { formatTokens, formatUsdDetailed } from "@/lib/reports";
 import {
@@ -25,6 +17,7 @@ import {
   type PersonalityOutput,
   type PersonalityProfile,
   type PersonalityStance,
+  type ReportUsage,
   type ScenarioLikelihood,
   type StanceTrend,
 } from "@/lib/types";
@@ -91,6 +84,87 @@ function useExpertRun(expertId: string, reportId: string) {
   return { run, busy: state === "loading" || isRefreshing, failed: state === "error" };
 }
 
+/** The expert's configured remit, under its name in the panel header. */
+function expertSubtitle(expert: Expert): string {
+  switch (expert.kind) {
+    case "analyst":
+      return expert.config.focus ?? "Neutral, evidence-based analysis";
+    case "sentiment":
+      return "What Reddit makes of this report's main points";
+    case "personality":
+      if (expert.config.personality_mode === "profiles") {
+        return "Who's who in this report";
+      }
+      return expert.config.issue ?? "Key players' stances, tracked over time";
+    case "mentor":
+      return `${
+        expert.config.teaching_focus === "entities"
+          ? "Explains the people, organisations & their ties"
+          : "Helps you understand key concepts"
+      } · ${expert.config.level ?? "basic"} level`;
+  }
+}
+
+/**
+ * The stored output rendered in this expert's own shape, or a note when the
+ * run produced nothing of that shape (an older or failed output).
+ */
+function ExpertBody({
+  expert,
+  output,
+}: {
+  expert: Expert;
+  output: ExpertOutput;
+}) {
+  const empty = (what: string) => (
+    <p className="px-4 py-4 text-sm text-ink-faint">
+      No {what} recorded for this report.
+    </p>
+  );
+
+  switch (expert.kind) {
+    case "sentiment":
+      return output.output.sentiment ? (
+        <SentimentBody reading={output.output.sentiment} />
+      ) : (
+        empty("sentiment reading")
+      );
+    case "analyst":
+      return output.output.analysis ? (
+        <AnalystBody analysis={output.output.analysis} />
+      ) : (
+        empty("analysis")
+      );
+    case "personality":
+      return output.output.personality ? (
+        <PersonalityBody personality={output.output.personality} />
+      ) : (
+        empty("personality reading")
+      );
+    case "mentor": {
+      const tips = output.output.tips ?? [];
+      return (
+        <ul className="divide-y divide-rule">
+          {tips.map((tip) => (
+            <TipCard
+              key={tip.id}
+              tip={tip}
+              expertId={expert.id}
+              outputId={output.id}
+            />
+          ))}
+          {tips.length === 0 && (
+            <li className="px-4 py-4 text-sm text-ink-faint">
+              Nothing new to explain in this report — you know this ground
+              already.
+            </li>
+          )}
+        </ul>
+      );
+    }
+  }
+}
+
 function ExpertCard({
   expert,
   output,
@@ -100,7 +174,6 @@ function ExpertCard({
   output: ExpertOutput | null;
   reportId: string;
 }) {
-  const isAnalyst = expert.kind === "analyst";
   const { run, busy, failed } = useExpertRun(expert.id, reportId);
 
   return (
@@ -110,33 +183,12 @@ function ExpertCard({
           aria-hidden
           className="flex size-9 shrink-0 items-center justify-center rounded-full border border-rule bg-neutral-50"
         >
-          {expert.kind === "analyst" ? (
-            <Landmark className="size-5" />
-          ) : expert.kind === "sentiment" ? (
-            <MessagesSquare className="size-5" />
-          ) : expert.kind === "personality" ? (
-            <Users className="size-5" />
-          ) : (
-            <Bot className="size-5" />
-          )}
+          <ExpertIcon kind={expert.kind} />
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-bold">{expert.name}</p>
           <p className="truncate text-xs text-ink-faint">
-            {expert.kind === "analyst"
-              ? (expert.config.focus ?? "Neutral, evidence-based analysis")
-              : expert.kind === "sentiment"
-                ? "What Reddit makes of this report's main points"
-                : expert.kind === "personality"
-                  ? expert.config.personality_mode === "profiles"
-                    ? "Who's who in this report"
-                    : (expert.config.issue ??
-                      "Key players' stances, tracked over time")
-                  : `${
-                      expert.config.teaching_focus === "entities"
-                        ? "Explains the people, organisations & their ties"
-                        : "Helps you understand key concepts"
-                    } · ${expert.config.level ?? "basic"} level`}
+            {expertSubtitle(expert)}
           </p>
         </div>
         {output && (
@@ -168,48 +220,7 @@ function ExpertCard({
           aria-busy={busy}
           className={busy ? "opacity-50 transition-opacity" : undefined}
         >
-          {expert.kind === "sentiment" ? (
-            output.output.sentiment ? (
-              <SentimentBody reading={output.output.sentiment} />
-            ) : (
-              <p className="px-4 py-4 text-sm text-ink-faint">
-                No sentiment reading recorded for this report.
-              </p>
-            )
-          ) : isAnalyst ? (
-            output.output.analysis ? (
-              <AnalystBody analysis={output.output.analysis} />
-            ) : (
-              <p className="px-4 py-4 text-sm text-ink-faint">
-                No analysis recorded for this report.
-              </p>
-            )
-          ) : expert.kind === "personality" ? (
-            output.output.personality ? (
-              <PersonalityBody personality={output.output.personality} />
-            ) : (
-              <p className="px-4 py-4 text-sm text-ink-faint">
-                No personality reading recorded for this report.
-              </p>
-            )
-          ) : (
-            <ul className="divide-y divide-rule">
-              {(output.output.tips ?? []).map((tip) => (
-                <TipCard
-                  key={tip.id}
-                  tip={tip}
-                  expertId={expert.id}
-                  outputId={output.id}
-                />
-              ))}
-              {(output.output.tips ?? []).length === 0 && (
-                <li className="px-4 py-4 text-sm text-ink-faint">
-                  Nothing new to explain in this report — you know this ground
-                  already.
-                </li>
-              )}
-            </ul>
-          )}
+          <ExpertBody expert={expert} output={output} />
         </div>
       ) : (
         <RunExpertPrompt
@@ -220,22 +231,23 @@ function ExpertCard({
         />
       )}
 
-      {output?.output.usage && output.output.usage.calls > 0 && (
-        <p className="border-t border-rule px-4 py-2 text-[11px] text-ink-faint">
-          This run:{" "}
-          {formatTokens(
-            output.output.usage.input_tokens + output.output.usage.output_tokens,
-          )}{" "}
-          tokens
-          {output.output.usage.web_search_calls > 0 &&
-            ` · ${output.output.usage.web_search_calls} web search${
-              output.output.usage.web_search_calls === 1 ? "" : "es"
-            }`}
-          {" · "}
-          {formatUsdDetailed(output.output.usage.estimated_cost_usd)}
-        </p>
-      )}
+      <RunCostLine usage={output?.output.usage} />
     </div>
+  );
+}
+
+/** What this expert's run cost, when it was recorded. */
+function RunCostLine({ usage }: { usage: ReportUsage | undefined }) {
+  if (!usage || usage.calls === 0) return null;
+  const searches = usage.web_search_calls;
+  return (
+    <p className="border-t border-rule px-4 py-2 text-[11px] text-ink-faint">
+      This run: {formatTokens(usage.input_tokens + usage.output_tokens)} tokens
+      {searches > 0 &&
+        ` · ${searches} web search${searches === 1 ? "" : "es"}`}
+      {" · "}
+      {formatUsdDetailed(usage.estimated_cost_usd)}
+    </p>
   );
 }
 

@@ -14,12 +14,13 @@ import { frameFactorNames } from "./types";
 import type {
   DetailLevel,
   Expert,
+  ExpertConfig,
+  ExpertKind,
   FeedbackRating,
   InterestFactor,
   MentorFocus,
   MentorLevel,
   MentorMemoryData,
-  PersonalityMode,
   Report,
   Topic,
 } from "./types";
@@ -357,17 +358,32 @@ export async function deleteTopic(topicId: string): Promise<void> {
 // Experts
 // ---------------------------------------------------------------------------
 
-const MENTOR_LEVELS: MentorLevel[] = ["basic", "intermediate", "advanced"];
-const MENTOR_FOCUSES: MentorFocus[] = ["concepts", "entities"];
-
-function parseMentorLevel(value: FormDataEntryValue | null): MentorLevel {
-  const level = String(value ?? "basic") as MentorLevel;
-  return MENTOR_LEVELS.includes(level) ? level : "basic";
+/** One of `allowed`, or `fallback` when the form sent anything else. */
+function parseChoice<T extends string>(
+  value: FormDataEntryValue | null,
+  allowed: readonly T[],
+  fallback: T,
+): T {
+  const choice = String(value ?? "") as T;
+  return allowed.includes(choice) ? choice : fallback;
 }
 
-function parseMentorFocus(value: FormDataEntryValue | null): MentorFocus {
-  const focus = String(value ?? "concepts") as MentorFocus;
-  return MENTOR_FOCUSES.includes(focus) ? focus : "concepts";
+const MENTOR_LEVELS = ["basic", "intermediate", "advanced"] as const;
+const MENTOR_FOCUSES = ["concepts", "entities"] as const;
+const PERSONALITY_MODES = ["stance", "profiles"] as const;
+
+function parseMentorConfig(formData: FormData): {
+  level: MentorLevel;
+  teaching_focus: MentorFocus;
+} {
+  return {
+    level: parseChoice(formData.get("level"), MENTOR_LEVELS, "basic"),
+    teaching_focus: parseChoice(
+      formData.get("teaching_focus"),
+      MENTOR_FOCUSES,
+      "concepts",
+    ),
+  };
 }
 
 /** Long enough for "Prof. James Chin"; short enough to sit in a panel header. */
@@ -378,6 +394,12 @@ const EXPERT_NAME_MAX = 60;
  * an unbounded paste would silently multiply per-report token cost.
  */
 const ANALYST_FOCUS_MAX = 4000;
+
+/**
+ * Like the analyst's specialization, the issue is injected into every
+ * stance-mode run — keep pasted text bounded.
+ */
+const PERSONALITY_ISSUE_MAX = 1000;
 
 /** A display name for an expert; blank falls back to the kind's default. */
 function parseExpertName(
@@ -391,107 +413,114 @@ function parseExpertName(
   return name || fallback;
 }
 
-export async function addMentorExpert(
+function parseBoundedText(
+  value: FormDataEntryValue | null,
+  max: number,
+): string {
+  return String(value ?? "")
+    .trim()
+    .slice(0, max);
+}
+
+/** Both pages that list experts also show them on the briefing. */
+function revalidateExpertPaths(topicId: string): void {
+  revalidatePath(`/topics/${topicId}/experts`);
+  revalidatePath(`/topics/${topicId}`);
+}
+
+/** Adds an expert to a topic and returns to its experts page. */
+async function addExpert(
   topicId: string,
-  formData: FormData,
+  expert: { kind: ExpertKind; name: string; config: ExpertConfig },
 ): Promise<void> {
   const { supabase, user } = await requireUser();
 
   await supabase.from("experts").insert({
     topic_id: topicId,
     user_id: user.id,
-    kind: "mentor",
-    name: "Mentor",
     status: "active",
-    config: {
-      level: parseMentorLevel(formData.get("level")),
-      teaching_focus: parseMentorFocus(formData.get("teaching_focus")),
-    },
+    ...expert,
   });
 
-  revalidatePath(`/topics/${topicId}/experts`);
-  revalidatePath(`/topics/${topicId}`);
+  revalidateExpertPaths(topicId);
   redirect(`/topics/${topicId}/experts`);
+}
+
+/**
+ * Applies a patch to one expert, given its current row. `patch` receives the
+ * stored config so callers can merge into it; returning nothing skips the write.
+ */
+async function updateExpert(
+  expertId: string,
+  patch: (
+    current: Pick<Expert, "topic_id" | "config" | "status">,
+  ) => Partial<Pick<Expert, "name" | "config" | "status">>,
+): Promise<void> {
+  const { supabase } = await requireUser();
+
+  const { data: expert } = await supabase
+    .from("experts")
+    .select("topic_id, config, status")
+    .eq("id", expertId)
+    .maybeSingle<Pick<Expert, "topic_id" | "config" | "status">>();
+  if (!expert) return;
+
+  await supabase
+    .from("experts")
+    .update({ ...patch(expert), updated_at: new Date().toISOString() })
+    .eq("id", expertId);
+
+  revalidateExpertPaths(expert.topic_id);
+}
+
+export async function addMentorExpert(
+  topicId: string,
+  formData: FormData,
+): Promise<void> {
+  await addExpert(topicId, {
+    kind: "mentor",
+    name: "Mentor",
+    config: parseMentorConfig(formData),
+  });
 }
 
 export async function addAnalystExpert(
   topicId: string,
   formData: FormData,
 ): Promise<void> {
-  const { supabase, user } = await requireUser();
-
-  const focus = String(formData.get("focus") ?? "")
-    .trim()
-    .slice(0, ANALYST_FOCUS_MAX);
-
-  await supabase.from("experts").insert({
-    topic_id: topicId,
-    user_id: user.id,
+  const focus = parseBoundedText(formData.get("focus"), ANALYST_FOCUS_MAX);
+  await addExpert(topicId, {
     kind: "analyst",
     name: parseExpertName(formData.get("name"), "Analyst"),
-    status: "active",
     // Empty focus falls back to the topic's own description at run time.
     config: focus ? { focus } : {},
   });
-
-  revalidatePath(`/topics/${topicId}/experts`);
-  revalidatePath(`/topics/${topicId}`);
-  redirect(`/topics/${topicId}/experts`);
 }
 
 export async function addSentimentExpert(topicId: string): Promise<void> {
-  const { supabase, user } = await requireUser();
-
-  await supabase.from("experts").insert({
-    topic_id: topicId,
-    user_id: user.id,
+  await addExpert(topicId, {
     kind: "sentiment",
     name: "Public Sentiment",
-    status: "active",
     config: {},
   });
-
-  revalidatePath(`/topics/${topicId}/experts`);
-  revalidatePath(`/topics/${topicId}`);
-  redirect(`/topics/${topicId}/experts`);
-}
-
-const PERSONALITY_MODES: PersonalityMode[] = ["stance", "profiles"];
-
-function parsePersonalityMode(
-  value: FormDataEntryValue | null,
-): PersonalityMode {
-  const mode = String(value ?? "stance") as PersonalityMode;
-  return PERSONALITY_MODES.includes(mode) ? mode : "stance";
-}
-
-/**
- * Like the analyst's specialization, the issue is injected into every
- * stance-mode run — keep pasted text bounded.
- */
-const PERSONALITY_ISSUE_MAX = 1000;
-
-function parsePersonalityIssue(value: FormDataEntryValue | null): string {
-  return String(value ?? "")
-    .trim()
-    .slice(0, PERSONALITY_ISSUE_MAX);
 }
 
 export async function addPersonalityExpert(
   topicId: string,
   formData: FormData,
 ): Promise<void> {
-  const { supabase, user } = await requireUser();
-
-  const mode = parsePersonalityMode(formData.get("personality_mode"));
-  const issue = parsePersonalityIssue(formData.get("issue"));
-
-  await supabase.from("experts").insert({
-    topic_id: topicId,
-    user_id: user.id,
+  const mode = parseChoice(
+    formData.get("personality_mode"),
+    PERSONALITY_MODES,
+    "stance",
+  );
+  const issue = parseBoundedText(
+    formData.get("issue"),
+    PERSONALITY_ISSUE_MAX,
+  );
+  await addExpert(topicId, {
     kind: "personality",
     name: parseExpertName(formData.get("name"), "Personality"),
-    status: "active",
     // Stance mode with an empty issue falls back to the topic's own
     // analytical question (or description) at run time.
     config: {
@@ -499,10 +528,6 @@ export async function addPersonalityExpert(
       ...(mode === "stance" && issue ? { issue } : {}),
     },
   });
-
-  revalidatePath(`/topics/${topicId}/experts`);
-  revalidatePath(`/topics/${topicId}`);
-  redirect(`/topics/${topicId}/experts`);
 }
 
 /**
@@ -514,31 +539,17 @@ export async function updatePersonalitySettings(
   expertId: string,
   formData: FormData,
 ): Promise<void> {
-  const { supabase } = await requireUser();
-
-  const { data: expert } = await supabase
-    .from("experts")
-    .select("topic_id, config")
-    .eq("id", expertId)
-    .maybeSingle<Pick<Expert, "topic_id" | "config">>();
-  if (!expert) return;
-
-  const issue = parsePersonalityIssue(formData.get("issue"));
-  await supabase
-    .from("experts")
-    .update({
-      name: parseExpertName(formData.get("name"), "Personality"),
-      config:
-        expert.config.personality_mode === "stance"
-          ? { ...expert.config, issue: issue || undefined }
-          : expert.config,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", expertId);
-
-  revalidatePath(`/topics/${expert.topic_id}/experts`);
-  // The briefing shows the expert's name on its panel.
-  revalidatePath(`/topics/${expert.topic_id}`);
+  const issue = parseBoundedText(
+    formData.get("issue"),
+    PERSONALITY_ISSUE_MAX,
+  );
+  await updateExpert(expertId, (expert) => ({
+    name: parseExpertName(formData.get("name"), "Personality"),
+    config:
+      expert.config.personality_mode === "stance"
+        ? { ...expert.config, issue: issue || undefined }
+        : expert.config,
+  }));
 }
 
 /** Analyst display name + specialization. */
@@ -546,81 +557,26 @@ export async function updateAnalystSettings(
   expertId: string,
   formData: FormData,
 ): Promise<void> {
-  const { supabase } = await requireUser();
-
-  const { data: expert } = await supabase
-    .from("experts")
-    .select("topic_id, config")
-    .eq("id", expertId)
-    .maybeSingle<Pick<Expert, "topic_id" | "config">>();
-  if (!expert) return;
-
-  const focus = String(formData.get("focus") ?? "")
-    .trim()
-    .slice(0, ANALYST_FOCUS_MAX);
-  await supabase
-    .from("experts")
-    .update({
-      name: parseExpertName(formData.get("name"), "Analyst"),
-      config: { ...expert.config, focus: focus || undefined },
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", expertId);
-
-  revalidatePath(`/topics/${expert.topic_id}/experts`);
-  // The briefing shows the expert's name on its panel.
-  revalidatePath(`/topics/${expert.topic_id}`);
+  const focus = parseBoundedText(formData.get("focus"), ANALYST_FOCUS_MAX);
+  await updateExpert(expertId, (expert) => ({
+    name: parseExpertName(formData.get("name"), "Analyst"),
+    config: { ...expert.config, focus: focus || undefined },
+  }));
 }
 
 export async function updateMentorSettings(
   expertId: string,
   formData: FormData,
 ): Promise<void> {
-  const { supabase } = await requireUser();
-
-  const { data: expert } = await supabase
-    .from("experts")
-    .select("topic_id, config")
-    .eq("id", expertId)
-    .maybeSingle<Pick<Expert, "topic_id" | "config">>();
-  if (!expert) return;
-
-  await supabase
-    .from("experts")
-    .update({
-      config: {
-        ...expert.config,
-        level: parseMentorLevel(formData.get("level")),
-        teaching_focus: parseMentorFocus(formData.get("teaching_focus")),
-      },
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", expertId);
-
-  revalidatePath(`/topics/${expert.topic_id}/experts`);
-  revalidatePath(`/topics/${expert.topic_id}`);
+  await updateExpert(expertId, (expert) => ({
+    config: { ...expert.config, ...parseMentorConfig(formData) },
+  }));
 }
 
 export async function toggleExpertStatus(expertId: string): Promise<void> {
-  const { supabase } = await requireUser();
-
-  const { data: expert } = await supabase
-    .from("experts")
-    .select("topic_id, status")
-    .eq("id", expertId)
-    .maybeSingle<Pick<Expert, "topic_id" | "status">>();
-  if (!expert) return;
-
-  await supabase
-    .from("experts")
-    .update({
-      status: expert.status === "active" ? "paused" : "active",
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", expertId);
-
-  revalidatePath(`/topics/${expert.topic_id}/experts`);
-  revalidatePath(`/topics/${expert.topic_id}`);
+  await updateExpert(expertId, (expert) => ({
+    status: expert.status === "active" ? "paused" : "active",
+  }));
 }
 
 export async function deleteExpert(expertId: string): Promise<void> {
@@ -635,8 +591,7 @@ export async function deleteExpert(expertId: string): Promise<void> {
   await supabase.from("experts").delete().eq("id", expertId);
 
   if (expert) {
-    revalidatePath(`/topics/${expert.topic_id}/experts`);
-    revalidatePath(`/topics/${expert.topic_id}`);
+    revalidateExpertPaths(expert.topic_id);
     // Deleting happens on the expert's own page — leave it before it 404s.
     redirect(`/topics/${expert.topic_id}/experts`);
   }

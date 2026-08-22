@@ -52,6 +52,17 @@ export function pricingFor(
   return best;
 }
 
+function tokenCost(
+  price: { input: number; output: number },
+  inputTokens: number,
+  outputTokens: number,
+): number {
+  return (
+    (inputTokens / 1_000_000) * price.input +
+    (outputTokens / 1_000_000) * price.output
+  );
+}
+
 /**
  * Cost of a single call. Null when the model's pricing is unknown.
  * Kept at 6dp so small per-step figures don't collapse to zero.
@@ -65,8 +76,7 @@ export function estimateCallCostUsd(
   const price = pricingFor(model);
   if (!price) return null;
   const cost =
-    (inputTokens / 1_000_000) * price.input +
-    (outputTokens / 1_000_000) * price.output +
+    tokenCost(price, inputTokens, outputTokens) +
     webSearchCalls * WEB_SEARCH_COST_PER_CALL;
   return Math.round(cost * 1_000_000) / 1_000_000;
 }
@@ -76,15 +86,11 @@ export function estimateCostUsd(
   byModel: Record<string, ModelUsage>,
   webSearchCalls: number,
 ): number | null {
-  let cost = webSearchCalls * WEB_SEARCH_COST_PER_CALL;
-  for (const [model, usage] of Object.entries(byModel)) {
-    const price = pricingFor(model);
-    if (!price) return null;
-    cost +=
-      (usage.input_tokens / 1_000_000) * price.input +
-      (usage.output_tokens / 1_000_000) * price.output;
-  }
-  return Math.round(cost * 10_000) / 10_000;
+  const { cost, unpricedModels } = estimatePartialCostUsd(
+    byModel,
+    webSearchCalls,
+  );
+  return unpricedModels.length > 0 ? null : cost;
 }
 
 /**
@@ -105,11 +111,25 @@ export function estimatePartialCostUsd(
       unpricedModels.push(model);
       continue;
     }
-    cost +=
-      (usage.input_tokens / 1_000_000) * price.input +
-      (usage.output_tokens / 1_000_000) * price.output;
+    cost += tokenCost(price, usage.input_tokens, usage.output_tokens);
   }
   return { cost: Math.round(cost * 10_000) / 10_000, unpricedModels };
+}
+
+/** Adds one model's counters into an accumulating per-model table, in place. */
+function foldModelUsage(
+  byModel: Record<string, ModelUsage>,
+  model: string,
+  usage: ModelUsage,
+): void {
+  const entry = (byModel[model] ??= {
+    calls: 0,
+    input_tokens: 0,
+    output_tokens: 0,
+  });
+  entry.calls += usage.calls;
+  entry.input_tokens += usage.input_tokens;
+  entry.output_tokens += usage.output_tokens;
 }
 
 /** Lifetime total across many stored usage records. */
@@ -139,14 +159,7 @@ export function sumUsage(
     totals.output += record.output_tokens;
     totals.searches += record.web_search_calls;
     for (const [model, usage] of Object.entries(record.by_model)) {
-      const entry = (byModel[model] ??= {
-        calls: 0,
-        input_tokens: 0,
-        output_tokens: 0,
-      });
-      entry.calls += usage.calls;
-      entry.input_tokens += usage.input_tokens;
-      entry.output_tokens += usage.output_tokens;
+      foldModelUsage(byModel, model, usage);
     }
   }
 
@@ -195,14 +208,7 @@ export function diffUsage(before: ReportUsage, after: ReportUsage): ReportUsage 
 export function addUsage(a: ReportUsage, b: ReportUsage): ReportUsage {
   const byModel: Record<string, ModelUsage> = structuredClone(a.by_model);
   for (const [model, usage] of Object.entries(b.by_model)) {
-    const entry = (byModel[model] ??= {
-      calls: 0,
-      input_tokens: 0,
-      output_tokens: 0,
-    });
-    entry.calls += usage.calls;
-    entry.input_tokens += usage.input_tokens;
-    entry.output_tokens += usage.output_tokens;
+    foldModelUsage(byModel, model, usage);
   }
   const webSearchCalls = a.web_search_calls + b.web_search_calls;
   return {
@@ -230,14 +236,11 @@ export function createUsageCollector(): UsageCollector {
 
   return {
     record(model, usage, searchCalls) {
-      const entry = (byModel[model] ??= {
-        calls: 0,
-        input_tokens: 0,
-        output_tokens: 0,
+      foldModelUsage(byModel, model, {
+        calls: 1,
+        input_tokens: usage?.input_tokens ?? 0,
+        output_tokens: usage?.output_tokens ?? 0,
       });
-      entry.calls += 1;
-      entry.input_tokens += usage?.input_tokens ?? 0;
-      entry.output_tokens += usage?.output_tokens ?? 0;
       webSearchCalls += searchCalls;
     },
 

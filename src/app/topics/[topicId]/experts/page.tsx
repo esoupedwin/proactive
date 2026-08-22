@@ -1,14 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import {
-  Bot,
-  ChevronLeft,
-  Landmark,
-  MessagesSquare,
-  Plus,
-  Users,
-} from "lucide-react";
+import { ChevronLeft, Plus } from "lucide-react";
 import { LinkPending } from "@/components/link-pending";
+import { EXPERT_KINDS, ExpertIcon } from "@/lib/expert-kinds";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Expert, Topic } from "@/lib/types";
 
@@ -90,24 +84,35 @@ export default async function TopicExpertsPage({
   );
 }
 
-const KIND_TITLE: Record<Expert["kind"], string> = {
-  mentor: "Mentor",
-  analyst: "Analyst",
-  sentiment: "Sentiment",
-  personality: "Personality",
-};
-
-const KIND_ICON: Record<Expert["kind"], React.ReactNode> = {
-  mentor: <Bot className="size-5" />,
-  analyst: <Landmark className="size-5" />,
-  sentiment: <MessagesSquare className="size-5" />,
-  personality: <Users className="size-5" />,
-};
+/** What this expert is set up to do, in one line on its tile. */
+function tileSummary(expert: Expert): string {
+  switch (expert.kind) {
+    case "analyst":
+      return expert.config.focus?.trim()
+        ? `Specialization: ${expert.config.focus}`
+        : "Analyzes the topic broadly through an independent lens.";
+    case "sentiment":
+      return "Searches Reddit for public reaction to each report's main points and reads the prevailing mood.";
+    case "personality":
+      if (expert.config.personality_mode === "profiles") {
+        return "Profiles the people mentioned in each report — who they are and why they matter.";
+      }
+      return expert.config.issue?.trim()
+        ? `Tracks key players' stances on: ${expert.config.issue}`
+        : "Tracks key players' stances on the topic's own question over time.";
+    case "mentor":
+      return "“Did you know” tips that build your understanding of this topic over time.";
+  }
+}
 
 /** One expert as a tappable summary card. */
 function ExpertTile({ expert, topicId }: { expert: Expert; topicId: string }) {
-  const isAnalyst = expert.kind === "analyst";
   const active = expert.status === "active";
+  // Only the kinds that can be added more than once carry a user-chosen name
+  // worth repeating under the kind title.
+  const showName =
+    (expert.kind === "analyst" || expert.kind === "personality") &&
+    expert.name !== EXPERT_KINDS[expert.kind].title;
   return (
     <li>
       <Link
@@ -127,60 +132,31 @@ function ExpertTile({ expert, topicId }: { expert: Expert; topicId: string }) {
               {active ? "Active" : "Paused"}
             </p>
             <h2 className="mt-0.5 text-xl font-bold tracking-tight">
-              {KIND_TITLE[expert.kind]}
+              {EXPERT_KINDS[expert.kind].title}
             </h2>
           </div>
           <span
             aria-hidden
             className="flex size-10 shrink-0 items-center justify-center rounded-full border border-rule bg-neutral-50"
           >
-            {KIND_ICON[expert.kind]}
+            <ExpertIcon kind={expert.kind} />
           </span>
         </div>
 
-        {isAnalyst ? (
-          <>
-            {expert.name !== "Analyst" && (
-              <p className="mt-3 truncate text-sm font-semibold">
-                {expert.name}
-              </p>
-            )}
-            <p className="mt-1 line-clamp-4 text-xs leading-relaxed text-ink-faint">
-              {expert.config.focus?.trim()
-                ? `Specialization: ${expert.config.focus}`
-                : "Analyzes the topic broadly through an independent lens."}
-            </p>
-          </>
-        ) : expert.kind === "sentiment" ? (
-          <p className="mt-3 text-xs leading-relaxed text-ink-faint">
-            Searches Reddit for public reaction to each report&apos;s main
-            points and reads the prevailing mood.
+        {showName && (
+          <p className="mt-3 truncate text-sm font-semibold">{expert.name}</p>
+        )}
+        <p
+          className={`line-clamp-4 text-xs leading-relaxed text-ink-faint ${
+            showName ? "mt-1" : "mt-3"
+          }`}
+        >
+          {tileSummary(expert)}
+        </p>
+        {expert.kind === "mentor" && (
+          <p className="mt-2 text-sm font-medium capitalize">
+            {(expert.config.level ?? "basic") + " level"}
           </p>
-        ) : expert.kind === "personality" ? (
-          <>
-            {expert.name !== "Personality" && (
-              <p className="mt-3 truncate text-sm font-semibold">
-                {expert.name}
-              </p>
-            )}
-            <p className="mt-1 line-clamp-4 text-xs leading-relaxed text-ink-faint">
-              {expert.config.personality_mode === "profiles"
-                ? "Profiles the people mentioned in each report — who they are and why they matter."
-                : expert.config.issue?.trim()
-                  ? `Tracks key players' stances on: ${expert.config.issue}`
-                  : "Tracks key players' stances on the topic's own question over time."}
-            </p>
-          </>
-        ) : (
-          <>
-            <p className="mt-3 text-xs leading-relaxed text-ink-faint">
-              “Did you know” tips that build your understanding of this topic
-              over time.
-            </p>
-            <p className="mt-2 text-sm font-medium capitalize">
-              {(expert.config.level ?? "basic") + " level"}
-            </p>
-          </>
         )}
       </Link>
     </li>
