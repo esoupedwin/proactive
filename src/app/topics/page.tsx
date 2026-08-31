@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Newspaper } from "lucide-react";
+import { Newspaper, Plus, User } from "lucide-react";
 import { BottomNav, type NavTopic } from "@/components/bottom-nav";
 import { DriveCopyButton } from "@/components/drive-copy-button";
 import { LinkPending } from "@/components/link-pending";
@@ -10,7 +10,7 @@ import { stripEntityMarkers } from "@/lib/entities";
 import { formatDateTime } from "@/lib/reports";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { isTopicUnread } from "@/lib/types";
-import type { HeroImage, QuestionVerdict, Topic } from "@/lib/types";
+import type { HeroImage, Profile, QuestionVerdict, Topic } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -67,13 +67,19 @@ export default async function HomePage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: topicRows } = await supabase
-    .from("topics")
-    .select(
-      "id, title, watch_mode, status, last_generated_at, last_read_at",
-    )
-    .order("position")
-    .order("created_at");
+  // Both key on the authenticated user, so they fan out together.
+  const [{ data: topicRows }, { data: profile }] = await Promise.all([
+    supabase
+      .from("topics")
+      .select("id, title, watch_mode, status, last_generated_at, last_read_at")
+      .order("position")
+      .order("created_at"),
+    supabase
+      .from("profiles")
+      .select("display_name, avatar_url")
+      .eq("id", user.id)
+      .maybeSingle<Pick<Profile, "display_name" | "avatar_url">>(),
+  ]);
   const topics = (topicRows ?? []) as HomeTopic[];
   if (topics.length === 0) redirect("/onboarding");
 
@@ -127,11 +133,20 @@ export default async function HomePage() {
 
   return (
     <main className="px-5 pb-28 pt-6">
-      <header className="mb-6 border-b border-rule pb-4">
-        <h1 className="text-2xl font-bold tracking-tight">Your topics</h1>
-        <p className="mt-1 text-sm leading-relaxed text-ink-soft">
-          Everything Proactive is watching for you, at a glance.
-        </p>
+      <header className="mb-6 flex items-start justify-between gap-4 border-b border-rule pb-4">
+        <div className="min-w-0">
+          {/* Wordmark: home is the app's front door, so it says whose it is.
+              Wider tracking than the segment headings, which share the small
+              uppercase treatment but label sections rather than the product. */}
+          <p className="text-xs font-semibold uppercase tracking-widest text-ink-faint">
+            Proactive
+          </p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight">Your topics</h1>
+          <p className="mt-1 text-sm leading-relaxed text-ink-soft">
+            Everything Proactive is watching for you, at a glance.
+          </p>
+        </div>
+        <ProfileAvatar profile={profile ?? null} />
       </header>
 
       {/* Home actions, first of more to come. */}
@@ -144,6 +159,16 @@ export default async function HomePage() {
           }))}
           buildScript={buildDriveScript}
         />
+        <Link
+          href="/topics/new"
+          aria-label="Add a new topic"
+          title="Add a new topic"
+          className="inline-flex size-11 items-center justify-center rounded-md border border-rule hover:bg-neutral-100"
+        >
+          <LinkPending>
+            <Plus className="size-5" aria-hidden />
+          </LinkPending>
+        </Link>
       </div>
 
       {segments.map((segment, i) => (
@@ -165,6 +190,45 @@ export default async function HomePage() {
           unread topic stays in the switcher's "New reports" segment. */}
       <BottomNav topics={navBarTopics} currentId="" />
     </main>
+  );
+}
+
+/**
+ * The signed-in user's picture, linking to settings. Google supplies it at
+ * signup; when it's missing (or the URL later 404s) the initial stands in, so
+ * the corner never renders as a broken image.
+ */
+function ProfileAvatar({
+  profile,
+}: {
+  profile: Pick<Profile, "display_name" | "avatar_url"> | null;
+}) {
+  const name = profile?.display_name?.trim() || "";
+  const initial = name.charAt(0).toUpperCase();
+  return (
+    <Link
+      href="/settings"
+      aria-label={name ? `Settings — signed in as ${name}` : "Settings"}
+      title={name || "Settings"}
+      className="shrink-0 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-ink"
+    >
+      {profile?.avatar_url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={profile.avatar_url}
+          alt=""
+          referrerPolicy="no-referrer"
+          className="size-10 rounded-full border border-rule bg-neutral-50 object-cover"
+        />
+      ) : (
+        <span
+          aria-hidden
+          className="flex size-10 items-center justify-center rounded-full border border-rule bg-neutral-50 text-sm font-bold text-ink-faint"
+        >
+          {initial || <User className="size-5" aria-hidden />}
+        </span>
+      )}
+    </Link>
   );
 }
 
