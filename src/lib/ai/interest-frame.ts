@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { interestFrameInstructions } from "../prompts";
 import type { InterestFactor } from "../types";
 import type { Llm } from "./llm";
 
@@ -44,12 +45,8 @@ export async function generateInterestFrame(
     tier: "search",
     schema: InterestFrameSchema,
     schemaName: "interest_frame",
-    instructions: [
-      "You design an Interest Frame: the analytical factors that determine how a topic develops, for a research-tracking app.",
-      "Each factor gets a short name, ONE key question the factor should answer, and 2-4 concrete observable indicators (the kind of evidence news or discussion would surface).",
-      "Factors must be mutually distinct and collectively cover the topic; 3-7 factors, most decisive first.",
-      "When an analytical question is given, the factors are the considerations that decide its answer — include a trigger-events factor for developments that could change the calculus.",
-    ].join("\n"),
+    // Text in lib/prompts.ts, the app-wide prompt catalog.
+    instructions: interestFrameInstructions(),
     input: JSON.stringify({
       title: topic.title,
       goal: topic.description,

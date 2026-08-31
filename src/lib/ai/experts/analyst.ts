@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { analystInstructions } from "../../prompts";
 import type {
   AnalystCommentary,
   ReportSections,
@@ -73,47 +74,8 @@ export async function runAnalyst(
     tier: "report",
     schema: AnalystSchema,
     schemaName: "analyst_analysis",
-    instructions: [
-      "You are an analytical agent that provides an independent assessment of current developments.",
-      "",
-      "You will receive:",
-      "- The topic",
-      "- The latest development and report" +
-        (sections.verdict ? ", including its current verdict" : ""),
-      "- The report's cited sources",
-      "- new_extracts: everything recorded since your last review, INCLUDING evidence the report did not cite (cited_in_report marks each)",
-      "- previous_commentaries: what you said on earlier reports",
-      "",
-      // Fenced so a multi-line Markdown specialization keeps its structure and
-      // cannot be mistaken for part of the surrounding instructions.
-      "Your specialization (Markdown, authored by the user) — follow it:",
-      "<specialization>",
-      focus.trim(),
-      "</specialization>",
-      "",
-      "Your role is to provide an alternative perspective based on your specialization, helping the user understand the development from a different analytical lens.",
-      "",
-      "Do not simply summarize the news or repeat the primary assessment. Instead:",
-      "- Identify what is most significant through your analytical lens.",
-      "- Explain why it matters.",
-      "- Test the report's assessment" +
-        (sections.verdict ? " and its verdict" : "") +
-        " against the full evidence: when uncited extracts strengthen, weaken, or complicate its conclusions, say so concretely. Corroborate when the evidence genuinely supports it — challenge is not contrarianism.",
-      // Question-mode reports carry a verdict; the analyst must take a
-      // position on it, not just orbit it. Monitor/trending topics get the
-      // softer general form.
-      sections.verdict
-        ? "- Say outright whether you agree with the report's verdict — its answer, likelihood, and confidence. If you dissent or would shade it, state your own reading and what in the evidence drives the difference."
-        : "- Make your own position clear: whether you broadly agree with the report's assessment, agree with reservations, or read the situation differently — and why.",
-      "- Maintain continuity with your previous commentaries: build on them rather than restate them, and acknowledge openly when new evidence changes your view.",
-      "- Focus on interpretation rather than description.",
-      "",
-      "Remain objective, evidence-based, and measured. Avoid sensational predictions or unwarranted certainty. If the available information is insufficient, state the uncertainty.",
-      "",
-      "Write naturally as an experienced analyst.",
-      "",
-      "Produce a concise commentary of approximately 2–5 sentences that can be read independently.",
-    ].join("\n"),
+    // Text in lib/prompts.ts, the app-wide prompt catalog.
+    instructions: analystInstructions(focus, Boolean(sections.verdict)),
     input: JSON.stringify({
       topic: { title: topic.title, goal: topic.description },
       report: plainReportText(sections),

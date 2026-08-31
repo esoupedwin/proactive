@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { newsQueryInstructions } from "../prompts";
 import type { Llm } from "./llm";
 
 /**
@@ -26,11 +27,8 @@ export async function generateNewsQuery(
     tier: "search",
     schema: NewsQuerySchema,
     schemaName: "news_query",
-    instructions: [
-      "You write ONE reusable news-search query for a topic the user follows.",
-      "The query is stored and reused for months, so capture the topic's evergreen core — no dates, no recency words, no site: or quote operators.",
-      "3-8 words, using the terms a news editor would use.",
-    ].join("\n"),
+    // Text in lib/prompts.ts, the app-wide prompt catalog.
+    instructions: newsQueryInstructions(),
     input: JSON.stringify({
       title: topic.title,
       goal: topic.description,

@@ -138,6 +138,16 @@ each report renders from) — historical reports keep their citations, and the
 Analyst expert keeps its evidence query. Old sources were **not** backfilled
 into `extracts`; the tracker repopulates each topic within one cycle.
 
+## Prompts
+
+Every instruction text — both agents, all four experts, the Situation
+pre-step, Tell-me-more, and the setup utilities (news query, interest frame)
+— lives in **`src/lib/prompts.ts`**, one catalog file the calling modules
+import from. Numeric limits quoted inside a prompt (roster caps, fact caps,
+tip counts) are defined there too, so text and limit can't drift apart.
+Schema field descriptions stay on their zod schemas; the resolved prompt of
+any past run is on the topic's Activity page (`reports.trace`).
+
 ## Module map — `src/lib/agents/`
 
 | File | Purpose |
