@@ -5,6 +5,7 @@ import { Activity, Bot, Coins, History, Layers, Pencil } from "lucide-react";
 import { AgentMemoryButton } from "@/components/agent-memory-button";
 import { BottomNav, type NavTopic } from "@/components/bottom-nav";
 import { ExpertPanel, type ExpertPanelItem } from "@/components/expert-panel";
+import { ExplainSelection } from "@/components/explain-selection";
 import { GenerateButton } from "@/components/generate-button";
 import { GenerationWatcher } from "@/components/generation-watcher";
 import { LinkPending } from "@/components/link-pending";
@@ -279,7 +280,7 @@ export default async function TopicBriefingPage({
       )}
 
       {readyReport?.sections ? (
-        <>
+        <ExplainSelection topicId={topic.id}>
           <ReportView
             sections={readyReport.sections}
             sources={sources}
@@ -292,7 +293,7 @@ export default async function TopicBriefingPage({
             initialComment={feedback?.comment ?? null}
           />
           <ExpertPanel items={expertItems} reportId={readyReport.id} />
-        </>
+        </ExplainSelection>
       ) : (
         !generating && (
           <div className="rounded-md border border-rule bg-neutral-50 px-4 py-8 text-center">

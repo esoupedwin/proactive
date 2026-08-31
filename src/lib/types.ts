@@ -482,6 +482,18 @@ export interface ExpertMemory {
   updated_at: string;
 }
 
+/** One "Tell me more" lookup: what was highlighted and what it got told. */
+export interface Explanation {
+  id: string;
+  topic_id: string;
+  user_id: string;
+  selection: string;
+  /** The block the selection lived in, kept for provenance. */
+  context: string | null;
+  explanation: string;
+  created_at: string;
+}
+
 // ---- Memory ----------------------------------------------------------------
 
 export interface ReportedDevelopment {
