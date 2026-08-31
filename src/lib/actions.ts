@@ -9,6 +9,7 @@ import { generateNewsQuery } from "./ai/news-query";
 import { openAiLlm } from "./ai/openai";
 import { isGenerationLocked } from "./reports";
 import { SEED_TOPICS } from "./seed-data";
+import { buildSpeechScript } from "./speech";
 import { createSupabaseServerClient } from "./supabase/server";
 import { frameFactorNames, situationFacts } from "./types";
 import type {
@@ -16,6 +17,7 @@ import type {
   Expert,
   ExpertConfig,
   ExpertKind,
+  ExpertOutput,
   FeedbackRating,
   InterestFactor,
   KnowledgeFact,
@@ -936,6 +938,87 @@ export async function seedSampleTopics(): Promise<void> {
 
   revalidatePath("/settings");
   redirect("/");
+}
+
+// ---------------------------------------------------------------------------
+// Drive narration
+// ---------------------------------------------------------------------------
+
+/** More topics than anyone narrates in one drive; guards a runaway request. */
+const DRIVE_SCRIPT_MAX_TOPICS = 30;
+
+/**
+ * One combined spoken script for the selected topics' current briefings —
+ * built for pasting into a voice assistant (e.g. ChatGPT) to narrate
+ * hands-free on a drive. Topics without a ready report are skipped; returns
+ * "" when nothing is narratable.
+ */
+export async function buildDriveScript(topicIds: string[]): Promise<string> {
+  const { supabase } = await requireUser();
+
+  const ids = topicIds
+    .filter((id) => typeof id === "string" && id)
+    .slice(0, DRIVE_SCRIPT_MAX_TOPICS);
+  if (ids.length === 0) return "";
+
+  // RLS scopes the reads; ordering follows the user's own topic arrangement,
+  // not the selection order.
+  const { data: topicRows } = await supabase
+    .from("topics")
+    .select("id, title")
+    .in("id", ids)
+    .order("position")
+    .order("created_at");
+  const topics = (topicRows ?? []) as Pick<Topic, "id" | "title">[];
+
+  const scripts = await Promise.all(
+    topics.map(async (topic) => {
+      const { data: report } = await supabase
+        .from("reports")
+        .select("id, sections, created_at")
+        .eq("topic_id", topic.id)
+        .eq("status", "ready")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle<Pick<Report, "id" | "sections" | "created_at">>();
+      if (!report?.sections) return null;
+
+      const [{ data: expertRows }, { data: outputRows }] = await Promise.all([
+        supabase
+          .from("experts")
+          .select("*")
+          .eq("topic_id", topic.id)
+          .eq("status", "active")
+          .order("created_at"),
+        supabase
+          .from("expert_outputs")
+          .select("*")
+          .eq("report_id", report.id),
+      ]);
+      const outputs = (outputRows ?? []) as ExpertOutput[];
+      const experts = ((expertRows ?? []) as Expert[]).map((expert) => ({
+        expert,
+        output: outputs.find((o) => o.expert_id === expert.id) ?? null,
+      }));
+
+      return buildSpeechScript({
+        topicTitle: topic.title,
+        sections: report.sections,
+        reportDate: report.created_at,
+        experts,
+      });
+    }),
+  );
+
+  const bodies = scripts.filter((s): s is string => Boolean(s));
+  if (bodies.length === 0) return "";
+
+  return [
+    "I'm driving. Please read the following " +
+      (bodies.length === 1 ? "briefing" : `${bodies.length} briefings`) +
+      " aloud to me, verbatim and at a natural pace. Announce each topic, pause briefly between topics, and don't add commentary.",
+    ...bodies,
+  ].join("\n\n");
 }
 
 // ---------------------------------------------------------------------------
