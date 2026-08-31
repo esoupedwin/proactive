@@ -1,4 +1,4 @@
-import type { LlmCallTrace, ReportTrace } from "../types";
+import type { AgentRunNote, LlmCallTrace, ReportTrace } from "../types";
 
 /**
  * Records the sequence of LLM calls made during one report generation so the
@@ -15,11 +15,14 @@ function clip(text: string): string {
 
 export interface TraceCollector {
   record(call: Omit<LlmCallTrace, "index">): void;
+  /** Records an agent run that ended early — see `AgentRunNote`. */
+  note(note: Omit<AgentRunNote, "at">): void;
   snapshot(): ReportTrace;
 }
 
 export function createTraceCollector(): TraceCollector {
   const calls: LlmCallTrace[] = [];
+  const notes: AgentRunNote[] = [];
 
   return {
     record(call) {
@@ -30,8 +33,14 @@ export function createTraceCollector(): TraceCollector {
         input: clip(call.input),
       });
     },
+    note(note) {
+      notes.push({ ...note, at: new Date().toISOString() });
+    },
     snapshot() {
-      return { calls: [...calls] };
+      // Omitted when empty, so a clean run's trace keeps its previous shape.
+      return notes.length > 0
+        ? { calls: [...calls], notes: [...notes] }
+        : { calls: [...calls] };
     },
   };
 }

@@ -220,8 +220,25 @@ export interface SearchResult {
   title?: string;
 }
 
+/**
+ * An agent run that ended before it finished. This is not a call — it happens
+ * in the runner, between calls — so it has nowhere to live in `calls` and
+ * would otherwise leave the trace looking like a complete run.
+ */
+export interface AgentRunNote {
+  /** Which agent stopped, e.g. "info-tracker". */
+  agent: string;
+  /** Why it stopped, as reported by the runner. */
+  error: string;
+  /** The turn budget it was given, when that was the limit it hit. */
+  max_turns?: number;
+  at: string;
+}
+
 export interface ReportTrace {
   calls: LlmCallTrace[];
+  /** Absent on traces recorded before runs could report being cut short. */
+  notes?: AgentRunNote[];
 }
 
 export interface Report {
@@ -630,6 +647,13 @@ export interface AgentStateData {
   /** Reporter only: max extracts.created_at already processed. */
   cursor?: string;
   last_run_at?: string;
+  /**
+   * Tracker only: the last run ended early (usually its turn budget), so the
+   * extracts it left are a partial harvest rather than a full sweep.
+   */
+  last_run_truncated?: boolean;
+  /** Tracker only: why that run ended early. Cleared by the next clean run. */
+  last_run_error?: string | null;
 }
 
 export type FeedbackRating = "up" | "down";

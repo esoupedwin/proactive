@@ -49,3 +49,32 @@ describe("trace collector", () => {
     expect(snap.calls).toHaveLength(1);
   });
 });
+
+describe("run notes", () => {
+  it("has no notes key at all on a clean run", () => {
+    const trace = createTraceCollector();
+    trace.record(makeCall());
+    expect(trace.snapshot().notes).toBeUndefined();
+  });
+
+  it("records an agent that stopped early, with its turn budget", () => {
+    const trace = createTraceCollector();
+    trace.record(makeCall());
+    trace.note({
+      agent: "info-tracker",
+      error: "Max turns (8) exceeded",
+      max_turns: 8,
+    });
+
+    const notes = trace.snapshot().notes!;
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toMatchObject({
+      agent: "info-tracker",
+      error: "Max turns (8) exceeded",
+      max_turns: 8,
+    });
+    expect(notes[0]!.at).toBeTruthy();
+    // The calls made before the abort are still the trace's main content.
+    expect(trace.snapshot().calls).toHaveLength(1);
+  });
+});

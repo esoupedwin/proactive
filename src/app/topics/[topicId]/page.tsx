@@ -279,6 +279,19 @@ export default async function TopicBriefingPage({
         </p>
       )}
 
+      {/* A truncated scan still produces a normal-looking report, so say so
+          rather than letting a partial harvest pass as a full sweep. */}
+      {trackerMemory?.last_run_truncated && (
+        <p
+          role="status"
+          className="mb-5 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        >
+          The last scan stopped early, so this briefing may be working from an
+          incomplete sweep of your key factors. Generating again picks up where
+          it left off.
+        </p>
+      )}
+
       {readyReport?.sections ? (
         <ExplainSelection topicId={topic.id}>
           <ReportView

@@ -29,6 +29,12 @@ function exaQuery(call: LlmCallTrace): string | null {
   }
 }
 
+/** Agent ids as the tabs above name them. */
+const AGENT_LABEL: Record<string, string> = {
+  "info-tracker": "Info Tracker",
+  reporter: "Reporter",
+};
+
 function isTrackerCall(call: LlmCallTrace): boolean {
   if (call.agent) return call.agent === "info-tracker";
   return (
@@ -64,6 +70,7 @@ export default async function AgentActivityPage({
     .maybeSingle<Pick<Report, "id" | "created_at" | "status" | "trace">>();
 
   const calls = report?.trace?.calls ?? [];
+  const notes = report?.trace?.notes ?? [];
   const trackerCalls = calls.filter(isTrackerCall);
   // Reporter tab also carries expert calls (they run as part of reporting)
   // and any legacy-pipeline stages.
@@ -88,6 +95,29 @@ export default async function AgentActivityPage({
             : "No report yet."}
         </p>
       </header>
+
+      {/* Above the tabs, not inside one: a run that stopped early is a fact
+          about the whole report, and the list below it looks complete. */}
+      {notes.map((note, i) => (
+        <div
+          key={i}
+          role="alert"
+          className="mb-5 rounded-md border border-amber-200 bg-amber-50 px-4 py-3"
+        >
+          <p className="text-sm font-semibold text-amber-900">
+            {AGENT_LABEL[note.agent] ?? note.agent} stopped before it finished
+          </p>
+          <p className="mt-1 text-sm leading-relaxed text-amber-900">
+            {note.error}
+            {note.max_turns !== undefined &&
+              ` The run is capped at ${note.max_turns} turns; it spends about one on its planned searches and two on each extract it records, so the calls listed below are a partial sweep, not the whole plan.`}
+          </p>
+          <p className="mt-1 text-xs text-amber-800">
+            Whatever it recorded before stopping was kept, and this report was
+            written from it. Generating again resumes the scan.
+          </p>
+        </div>
+      ))}
 
       {calls.length === 0 ? (
         <p className="rounded-md border border-rule bg-neutral-50 px-4 py-8 text-center text-sm text-ink-faint">

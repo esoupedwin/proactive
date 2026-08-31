@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { maxExtractsPerRun, trackerInstructions } from "@/lib/agents/tracker/agent";
 import { buildSearchPlan, renderSearchPlan } from "@/lib/agents/tracker/search-plan";
+import { trackerMaxTurns } from "@/lib/agents/tracker/run";
 import type { Topic } from "@/lib/types";
 
 const NOW = new Date("2026-08-23T10:00:00Z");
@@ -179,5 +180,24 @@ describe("trackerInstructions", () => {
     expect(maxExtractsPerRun(5)).toBe(10);
     expect(maxExtractsPerRun(7)).toBe(14);
     expect(maxExtractsPerRun(10)).toBe(16);
+  });
+});
+
+describe("trackerMaxTurns", () => {
+  // The agent spends ~1 turn on the planned searches, 2 per extract it
+  // records, and 1 closing — so the budget has to track the factor count.
+  it("scales with the factors the plan will search", () => {
+    expect(trackerMaxTurns(1)).toBe(8);
+    expect(trackerMaxTurns(3)).toBe(12);
+    expect(trackerMaxTurns(6)).toBe(18);
+  });
+
+  it("stays capped, because callers share a 300s function limit", () => {
+    expect(trackerMaxTurns(7)).toBe(20);
+    expect(trackerMaxTurns(10)).toBe(20);
+  });
+
+  it("gives a frameless topic room for its exploratory search", () => {
+    expect(trackerMaxTurns(0)).toBe(8);
   });
 });

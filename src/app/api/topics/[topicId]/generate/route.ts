@@ -20,9 +20,6 @@ export const maxDuration = 300;
 // on-demand generate is the user asking "what's new NOW", but repeat clicks
 // shouldn't re-search the web every time.
 const TRACKER_STALE_MINUTES = 60;
-// Inline tracker is tighter than the scheduled one to protect the reporter's
-// share of the 300s budget.
-const INLINE_TRACKER_MAX_TURNS = 8;
 
 /** POST /api/topics/[topicId]/generate — manually trigger a new update. */
 export async function POST(
@@ -97,13 +94,14 @@ export async function POST(
       await persistence
         .setStage?.(report.id, "Scanning for new developments")
         .catch(() => {});
+      // Turn budget is left to runInfoTracker, which sizes it to the topic's
+      // factor count — a flat inline cap starved factor-rich topics.
       await runInfoTracker({
         store,
         exa: createExaSearcher(),
         topic,
         usage,
         trace,
-        maxTurns: INLINE_TRACKER_MAX_TURNS,
       });
     }
   } catch (err) {

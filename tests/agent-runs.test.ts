@@ -214,6 +214,32 @@ describe("info tracker run", () => {
     expect(result.ok).toBe(false);
     expect(result.error).toBeTruthy();
   });
+
+  it("a cut-off run leaves a trace note and a truncation flag", async () => {
+    const store = createInMemoryExtractStore();
+    const trace = createTraceCollector();
+    await runInfoTracker({
+      store,
+      exa: { search: vi.fn(async () => []) },
+      topic,
+      trace,
+      maxTurns: 4,
+      modelProvider: failingProvider(),
+    });
+
+    // The abort happens in the runner, so without the note the activity page
+    // would show a tidy list of calls and no sign the agent was stopped.
+    const notes = trace.snapshot().notes!;
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toMatchObject({ agent: "info-tracker", max_turns: 4 });
+
+    const state = await store.getAgentState(topic.id, "tracker");
+    expect(state.last_run_truncated).toBe(true);
+    expect(state.last_run_error).toBeTruthy();
+    // Not stamped: an unfinished run must still read as due, so the next
+    // generate re-scans instead of skipping on the staleness check.
+    expect(state.last_run_at).toBeUndefined();
+  });
 });
 
 describe("reporter run", () => {
