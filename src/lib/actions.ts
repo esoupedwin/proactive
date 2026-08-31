@@ -182,7 +182,7 @@ export async function createTopic(
   // "Formulated when the topic is first set up" — stored for reuse.
   await storeNewsQuery(supabase, topic.id, parsed.data);
 
-  revalidatePath("/settings");
+  revalidatePath("/settings/topics");
   redirect(`/topics/${topic.id}`);
 }
 
@@ -211,7 +211,7 @@ export async function updateTopic(
   await storeNewsQuery(supabase, topicId, parsed.data);
 
   revalidatePath(`/topics/${topicId}`);
-  revalidatePath("/settings");
+  revalidatePath("/settings/topics");
   redirect(`/topics/${topicId}`);
 }
 
@@ -274,7 +274,7 @@ export async function toggleTopicStatus(topicId: string): Promise<void> {
     })
     .eq("id", topicId);
 
-  revalidatePath("/settings");
+  revalidatePath("/settings/topics");
   revalidatePath(`/topics/${topicId}`);
 }
 
@@ -340,7 +340,7 @@ export async function resetTopic(topicId: string): Promise<void> {
   revalidatePath(`/topics/${topicId}`);
   revalidatePath(`/topics/${topicId}/history`);
   revalidatePath(`/topics/${topicId}/extracts`);
-  revalidatePath("/settings");
+  revalidatePath("/settings/topics");
   redirect(`/topics/${topicId}`);
 }
 
@@ -356,7 +356,7 @@ export async function deleteTopic(topicId: string): Promise<void> {
     .eq("id", user.id)
     .eq("last_viewed_topic_id", topicId);
 
-  revalidatePath("/settings");
+  revalidatePath("/settings/topics");
   redirect("/settings");
 }
 
@@ -791,7 +791,7 @@ export async function updateProfilePreferences(formData: FormData): Promise<void
     })
     .eq("id", user.id);
 
-  revalidatePath("/settings");
+  revalidatePath("/settings/profile");
 }
 
 const FONT_WEIGHTS = [300, 400, 500] as const;
@@ -936,7 +936,7 @@ export async function seedSampleTopics(): Promise<void> {
     redirect(`/onboarding?error=${encodeURIComponent(firstError ?? "seed failed")}`);
   }
 
-  revalidatePath("/settings");
+  revalidatePath("/settings/topics");
   redirect("/");
 }
 

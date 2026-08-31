@@ -1,23 +1,65 @@
 import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ChevronLeft, Plus } from "lucide-react";
-import { LinkPending } from "@/components/link-pending";
-import { TopicRow } from "@/components/topic-row";
-import { Button, Field, Input, Select } from "@/components/ui";
 import {
-  signOut,
-  updateDisplaySettings,
-  updateProfilePreferences,
-} from "@/lib/actions";
-import { sumUsage } from "@/lib/ai/usage";
-import { formatTokens, formatUsdDetailed } from "@/lib/reports";
+  CircleDollarSign,
+  Flame,
+  History,
+  Scaling,
+  User,
+  type LucideIcon,
+} from "lucide-react";
+import { LinkPending } from "@/components/link-pending";
+import { SettingsHeader } from "@/components/settings-header";
+import { signOut } from "@/lib/actions";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import type { Profile, Report, Topic } from "@/lib/types";
+import type { Profile } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-/** Profile & Settings — user info, preferences, and the Manage List. */
+/** One tile in the settings grid. */
+interface SettingsTile {
+  href: string;
+  label: string;
+  /** Announced instead of the two-line label, which reads oddly aloud. */
+  description: string;
+  Icon: LucideIcon;
+}
+
+const TILES: SettingsTile[] = [
+  {
+    href: "/settings/explanations",
+    label: "Tell Me More History",
+    description: "Every passage you highlighted, with the answer it got",
+    Icon: History,
+  },
+  {
+    href: "/settings/display",
+    label: "Display Preferences",
+    description: "How reading text appears",
+    Icon: Scaling,
+  },
+  {
+    href: "/settings/profile",
+    label: "Profile Preferences",
+    description: "Default detail level and your background",
+    Icon: User,
+  },
+  {
+    href: "/settings/topics",
+    label: "Topic of Interest",
+    description: "Add, pause, and manage your topics",
+    Icon: Flame,
+  },
+  {
+    href: "/settings/cost",
+    label: "Cost",
+    description: "Total LLM spend so far",
+    Icon: CircleDollarSign,
+  },
+];
+
+/** Profile & Settings — who you are, and a way into each settings page. */
 export default async function SettingsPage() {
   const supabase = await createSupabaseServerClient();
   const {
@@ -25,41 +67,20 @@ export default async function SettingsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [{ data: profile }, { data: topicRows }, { data: usageRows }] =
-    await Promise.all([
-      supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", user.id)
-        .maybeSingle<Profile>(),
-      supabase.from("topics").select("*").order("position").order("created_at"),
-      // RLS scopes this to the signed-in user; every report-attached LLM cost
-      // (pipeline, experts, expansions) lands in reports.usage.
-      supabase.from("reports").select("usage").not("usage", "is", null),
-    ]);
-  const topics = (topicRows ?? []) as Topic[];
-  const spend = sumUsage(
-    ((usageRows ?? []) as Pick<Report, "usage">[]).map((row) => row.usage),
-  );
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("display_name, avatar_url")
+    .eq("id", user.id)
+    .maybeSingle<Pick<Profile, "display_name" | "avatar_url">>();
 
   return (
     <main className="px-5 pb-16 pt-6">
-      <header className="mb-6 border-b border-rule pb-4">
-        <Link
-          href="/"
-          className="mb-2 inline-flex items-center gap-1 text-sm text-ink-faint hover:text-ink"
-        >
-          <LinkPending>
-            <ChevronLeft className="size-4" aria-hidden />
-          </LinkPending>{" "}
-          Back to briefing
-        </Link>
-        <h1 className="text-2xl font-bold tracking-tight">
-          Profile &amp; Settings
-        </h1>
-      </header>
+      <SettingsHeader
+        title="Profile & Settings"
+        backHref="/"
+        backLabel="Back to briefing"
+      />
 
-      {/* Profile */}
       <section aria-label="Profile" className="mb-8">
         <div className="flex items-center gap-4">
           {profile?.avatar_url ? (
@@ -94,135 +115,30 @@ export default async function SettingsPage() {
             </form>
           </div>
         </div>
-
-        {/* Lifetime LLM spend, across every topic and every kind of run. */}
-        <div className="mt-4 rounded-md border border-rule px-4 py-3">
-          <div className="flex items-baseline justify-between gap-3">
-            <p className="text-sm font-medium">Total LLM cost so far</p>
-            <p className="font-mono text-xl font-semibold tabular-nums">
-              {formatUsdDetailed(spend.estimated_cost_usd)}
-            </p>
-          </div>
-          <p className="mt-1 text-xs leading-relaxed text-ink-faint">
-            {spend.runs === 0
-              ? "No updates generated yet."
-              : `${formatTokens(spend.input_tokens + spend.output_tokens)} tokens · ${spend.calls} model call${spend.calls === 1 ? "" : "s"} · ${spend.web_search_calls} web search${spend.web_search_calls === 1 ? "" : "es"} across ${spend.runs} update${spend.runs === 1 ? "" : "s"} in ${topics.length} topic${topics.length === 1 ? "" : "s"}.`}
-          </p>
-          {spend.unpriced_models.length > 0 && (
-            <p className="mt-1 text-xs leading-relaxed text-ink-faint">
-              Excludes {spend.unpriced_models.join(", ")} — no pricing
-              configured, so the real total is higher.
-            </p>
-          )}
-        </div>
       </section>
 
-      {/* Preferences */}
-      <section aria-label="Preferences" className="mb-8">
-        <h2 className="mb-3 border-b border-rule pb-1 text-sm font-bold uppercase tracking-wide">
-          Preferences
-        </h2>
-        <form action={updateProfilePreferences} className="space-y-4">
-          <Field
-            label="Default detail level"
-            htmlFor="default_detail_level"
-            hint="Used as the default for new topics."
-          >
-            <Select
-              id="default_detail_level"
-              name="default_detail_level"
-              defaultValue={profile?.default_detail_level ?? "standard"}
-            >
-              <option value="brief">Brief</option>
-              <option value="standard">Standard</option>
-              <option value="deep">Deep</option>
-            </Select>
-          </Field>
-          <Field
-            label="Your background (optional)"
-            htmlFor="expertise_level"
-            hint="Helps reports match your expertise, e.g. “software engineer”."
-          >
-            <Input
-              id="expertise_level"
-              name="expertise_level"
-              defaultValue={profile?.expertise_level ?? ""}
-              placeholder="e.g. product manager"
-            />
-          </Field>
-          <Button type="submit" variant="outline">
-            Save preferences
-          </Button>
-        </form>
-      </section>
-
-      {/* Display */}
-      <section aria-label="Display" className="mb-8">
-        <h2 className="mb-3 border-b border-rule pb-1 text-sm font-bold uppercase tracking-wide">
-          Display
-        </h2>
-        <form action={updateDisplaySettings} className="space-y-4">
-          <Field
-            label="Body text weight"
-            htmlFor="font_weight"
-            hint="How heavy regular reading text appears. Headings stay bold."
-          >
-            <Select
-              id="font_weight"
-              name="font_weight"
-              defaultValue={String(profile?.font_weight ?? 400)}
-            >
-              <option value="300">Light (300)</option>
-              <option value="400">Regular (400)</option>
-              <option value="500">Medium (500)</option>
-            </Select>
-          </Field>
-          <p
-            className="rounded-md border border-rule bg-neutral-50 px-4 py-3 text-sm leading-relaxed"
-            style={{ fontWeight: profile?.font_weight ?? 400 }}
-          >
-            Preview: Proactive tracks your topics, remembers what you were
-            told, and reports only what changed.
-          </p>
-          <Button type="submit" variant="outline">
-            Save display settings
-          </Button>
-        </form>
-      </section>
-
-      {/* Manage list */}
-      <section aria-label="Topics of Interest">
-        <div className="mb-1 flex items-center justify-between border-b border-rule pb-1">
-          <h2 className="text-sm font-bold uppercase tracking-wide">
-            Topics of Interest
-          </h2>
-          <Link
-            href="/topics/new"
-            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm font-medium hover:bg-neutral-100"
-          >
-            <LinkPending>
-              <Plus className="size-4" aria-hidden />
-            </LinkPending>{" "}
-            Add interest
-          </Link>
-        </div>
-
-        {topics.length === 0 ? (
-          <p className="py-8 text-center text-sm text-ink-faint">
-            No topics yet.{" "}
-            <Link href="/topics/new" className="underline">
-              Add your first interest
-            </Link>
-            .
-          </p>
-        ) : (
-          <ul>
-            {topics.map((topic) => (
-              <TopicRow key={topic.id} topic={topic} />
-            ))}
-          </ul>
-        )}
-      </section>
+      <nav aria-label="Settings">
+        <ul className="grid grid-cols-3 gap-x-4 gap-y-6">
+          {TILES.map(({ href, label, description, Icon }) => (
+            <li key={href}>
+              <Link
+                href={href}
+                title={description}
+                className="group flex flex-col items-center gap-2 text-center"
+              >
+                <span className="flex aspect-square w-full items-center justify-center rounded-xl border border-rule transition-colors group-hover:bg-neutral-50">
+                  {/* LinkPending swaps in a spinner mid-navigation; sized to
+                      the icon so the tile doesn't shift. */}
+                  <LinkPending className="size-8">
+                    <Icon className="size-8" strokeWidth={1.5} aria-hidden />
+                  </LinkPending>
+                </span>
+                <span className="text-sm leading-snug">{label}</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </nav>
     </main>
   );
 }
