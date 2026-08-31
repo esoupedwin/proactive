@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Newspaper } from "lucide-react";
-import { BottomNav } from "@/components/bottom-nav";
+import { BottomNav, type NavTopic } from "@/components/bottom-nav";
 import { DriveCopyButton } from "@/components/drive-copy-button";
 import { LinkPending } from "@/components/link-pending";
 import { Badge } from "@/components/ui";
@@ -9,6 +9,7 @@ import { buildDriveScript } from "@/lib/actions";
 import { stripEntityMarkers } from "@/lib/entities";
 import { formatDateTime } from "@/lib/reports";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { isTopicUnread } from "@/lib/types";
 import type { HeroImage, QuestionVerdict, Topic } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +23,26 @@ interface HomeReportRow {
   verdict: QuestionVerdict | null;
 }
 
-type HomeTopic = Pick<Topic, "id" | "title" | "watch_mode" | "status">;
+type HomeTopic = Pick<
+  Topic,
+  | "id"
+  | "title"
+  | "watch_mode"
+  | "status"
+  | "last_generated_at"
+  | "last_read_at"
+>;
+
+/** One row of the home list: a topic, its latest report, and its read state. */
+interface HomeEntry {
+  topic: HomeTopic;
+  report: HomeReportRow | null;
+  unread: boolean;
+}
+
+/** Sort key for the unread segment — newest report first. */
+const updatedMs = (topic: HomeTopic) =>
+  topic.last_generated_at ? new Date(topic.last_generated_at).getTime() : 0;
 
 /**
  * The one-liner under each topic: question topics show their current answer;
@@ -49,7 +69,9 @@ export default async function HomePage() {
 
   const { data: topicRows } = await supabase
     .from("topics")
-    .select("id, title, watch_mode, status")
+    .select(
+      "id, title, watch_mode, status, last_generated_at, last_read_at",
+    )
     .order("position")
     .order("created_at");
   const topics = (topicRows ?? []) as HomeTopic[];
@@ -70,6 +92,38 @@ export default async function HomePage() {
         .then(({ data }) => data),
     ),
   );
+
+  // The same shape the briefing page hands the switcher, so the bar segments
+  // into "New reports" / "Read reports" here too rather than a flat list.
+  const navBarTopics: NavTopic[] = topics.map((topic) => ({
+    id: topic.id,
+    title: topic.title,
+    unread: isTopicUnread(topic),
+    updatedAt: topic.last_generated_at,
+  }));
+
+  // Pair each topic with its report before splitting, so the two stay together
+  // once the order changes.
+  const entries: HomeEntry[] = topics.map((topic, i) => ({
+    topic,
+    report: latest[i] ?? null,
+    unread: isTopicUnread(topic),
+  }));
+  // Same split and ordering as the switcher: unread first, newest at the top,
+  // the rest in the user's own arrangement.
+  const unread = entries
+    .filter((e) => e.unread)
+    .sort((a, b) => updatedMs(b.topic) - updatedMs(a.topic));
+  const read = entries.filter((e) => !e.unread);
+  // Headings only earn their space once something is unread; with nothing new
+  // the page is just the list.
+  const segments =
+    unread.length > 0
+      ? [
+          { heading: "New reports", entries: unread },
+          { heading: "Read reports", entries: read },
+        ]
+      : [{ heading: null, entries: read }];
 
   return (
     <main className="px-5 pb-28 pt-6">
@@ -92,60 +146,79 @@ export default async function HomePage() {
         />
       </div>
 
-      <ul className="divide-y divide-rule">
-        {topics.map((topic, i) => {
-          const report = latest[i] ?? null;
-          return (
-            <li key={topic.id}>
-              <Link
-                href={`/topics/${topic.id}`}
-                className="flex items-center gap-4 py-4 transition-colors hover:bg-neutral-50"
-              >
-                {report?.hero_image?.url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={report.hero_image.url}
-                    alt=""
-                    loading="lazy"
-                    className="size-20 shrink-0 rounded-lg border border-rule bg-neutral-50 object-cover"
-                  />
-                ) : (
-                  <span
-                    aria-hidden
-                    className="flex size-20 shrink-0 items-center justify-center rounded-lg border border-rule bg-neutral-50"
-                  >
-                    <Newspaper className="size-7 text-ink-faint" />
-                  </span>
-                )}
-                <div className="min-w-0 flex-1">
-                  <p className="flex items-center gap-2">
-                    <span className="min-w-0 truncate text-base font-bold">
-                      {topic.title}
-                    </span>
-                    {topic.status === "paused" && (
-                      <Badge tone="paused">paused</Badge>
-                    )}
-                    <LinkPending className="size-3.5 shrink-0 text-ink-faint" />
-                  </p>
-                  {report && (
-                    <p className="mt-0.5 text-xs text-ink-faint">
-                      {formatDateTime(report.created_at)}
-                    </p>
-                  )}
-                  <p className="mt-1 line-clamp-3 text-sm leading-relaxed text-ink-soft">
-                    {topicOneLiner(topic, report)}
-                  </p>
-                </div>
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
+      {segments.map((segment, i) => (
+        <section key={segment.heading ?? "all"} className={i > 0 ? "mt-6" : ""}>
+          {segment.heading && (
+            <h2 className="pb-1 text-[11px] uppercase tracking-wide text-ink-faint">
+              {segment.heading}
+            </h2>
+          )}
+          <ul className="divide-y divide-rule">
+            {segment.entries.map((entry) => (
+              <TopicRow key={entry.topic.id} entry={entry} />
+            ))}
+          </ul>
+        </section>
+      ))}
 
-      <BottomNav
-        topics={topics.map(({ id, title }) => ({ id, title }))}
-        currentId=""
-      />
+      {/* Home reads no briefing, so nothing is marked read here — every
+          unread topic stays in the switcher's "New reports" segment. */}
+      <BottomNav topics={navBarTopics} currentId="" />
     </main>
+  );
+}
+
+/** One topic in the home list: thumbnail, title, and its current one-liner. */
+function TopicRow({ entry }: { entry: HomeEntry }) {
+  const { topic, report, unread } = entry;
+  return (
+    <li>
+      <Link
+        href={`/topics/${topic.id}`}
+        className="flex items-center gap-4 py-4 transition-colors hover:bg-neutral-50"
+      >
+        {report?.hero_image?.url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={report.hero_image.url}
+            alt=""
+            loading="lazy"
+            className="size-20 shrink-0 rounded-lg border border-rule bg-neutral-50 object-cover"
+          />
+        ) : (
+          <span
+            aria-hidden
+            className="flex size-20 shrink-0 items-center justify-center rounded-lg border border-rule bg-neutral-50"
+          >
+            <Newspaper className="size-7 text-ink-faint" />
+          </span>
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="flex items-center gap-2">
+            <span className="min-w-0 truncate text-base font-bold">
+              {topic.title}
+            </span>
+            {/* The same dot the switcher uses, so a row scrolled away from its
+                heading still reads as new. */}
+            {unread && (
+              <span
+                aria-label="Unread report"
+                className="size-1.5 shrink-0 rounded-full bg-emerald-600"
+              />
+            )}
+            {topic.status === "paused" && <Badge tone="paused">paused</Badge>}
+            <LinkPending className="size-3.5 shrink-0 text-ink-faint" />
+          </p>
+          {report && (
+            <p className="mt-0.5 text-xs text-ink-faint">
+              {formatDateTime(report.created_at)}
+            </p>
+          )}
+          <p className="mt-1 line-clamp-3 text-sm leading-relaxed text-ink-soft">
+            {topicOneLiner(topic, report)}
+          </p>
+        </div>
+      </Link>
+    </li>
   );
 }
