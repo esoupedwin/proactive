@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Settings } from "lucide-react";
+import { ChevronLeft, ChevronRight, House, Settings } from "lucide-react";
 import { version } from "../../package.json";
 import { InfoButton } from "./info-button";
 import { LinkPending } from "./link-pending";
@@ -51,6 +51,16 @@ export function BottomNav({
         </Link>
 
         <InfoButton version={version} />
+
+        <Link
+          href="/topics"
+          aria-label="Home — all topics"
+          className="rounded-md p-2.5 hover:bg-neutral-100"
+        >
+          <LinkPending className="size-5">
+            <House className="size-5" aria-hidden />
+          </LinkPending>
+        </Link>
 
         <div className="flex min-w-0 flex-1 items-center justify-end gap-1">
           {hasSiblings && prev ? (

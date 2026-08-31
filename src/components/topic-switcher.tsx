@@ -65,12 +65,13 @@ export function TopicSwitcher({
   const unreadIds = new Set(unread.map((t) => t.id));
   const read = topics.filter((t) => !unreadIds.has(t.id));
 
+  // With no current topic the bar is on the home page — label it as such.
+  const label = current?.title ?? "Home";
+
   // A single topic has nothing to switch to — stay a plain label.
   if (topics.length < 2) {
     return (
-      <span className="min-w-0 truncate text-sm font-semibold">
-        {current?.title ?? ""}
-      </span>
+      <span className="min-w-0 truncate text-sm font-semibold">{label}</span>
     );
   }
 
@@ -81,12 +82,10 @@ export function TopicSwitcher({
         onClick={() => setOpen(!open)}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label={`Switch topic. Current: ${current?.title ?? "none"}`}
+        aria-label={`Switch topic. Current: ${label}`}
         className="flex min-w-0 items-center gap-1 rounded-md px-2 py-1.5 hover:bg-neutral-100"
       >
-        <span className="min-w-0 truncate text-sm font-semibold">
-          {current?.title ?? ""}
-        </span>
+        <span className="min-w-0 truncate text-sm font-semibold">{label}</span>
         <ChevronsUpDown
           className="size-3.5 shrink-0 text-ink-faint"
           aria-hidden
