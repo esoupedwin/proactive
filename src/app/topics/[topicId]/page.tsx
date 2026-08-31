@@ -301,6 +301,12 @@ export default async function TopicBriefingPage({
             <p className="mt-1 text-sm text-ink-faint">
               Generate your first update to get a briefing on this topic.
             </p>
+            {/* The action row's compact icon is easy to miss on a topic with
+                nothing on screen yet, so the empty state offers the labelled
+                button too. Both drive the same endpoint. */}
+            <div className="mt-4 flex justify-center">
+              <GenerateButton topicId={topic.id} />
+            </div>
           </div>
         )
       )}
