@@ -1,7 +1,7 @@
 import {
   LoadingAnnouncement,
   Skeleton,
-  SkeletonText,
+  SkeletonExtractList,
 } from "@/components/skeleton";
 
 /** Extracts — badge row, headline, publisher line, gist, per entry. */
@@ -16,25 +16,13 @@ export default function Loading() {
         <Skeleton className="mt-2 h-3 w-full max-w-[18rem]" />
       </header>
 
-      <ul className="divide-y divide-rule">
-        {Array.from({ length: 5 }, (_, i) => (
-          <li key={i} className="py-4">
-            <div className="flex items-center gap-2">
-              <Skeleton className="h-5 w-14 rounded-full" />
-              <Skeleton className="h-3 w-32" />
-            </div>
-            <Skeleton className="mt-2 h-4 w-11/12" />
-            <Skeleton className="mt-1.5 h-3 w-40" />
-            <SkeletonText lines={2} className="mt-2" />
-          </li>
-        ))}
-      </ul>
+      {/* The filter field, which the page renders above the list. */}
+      <div className="mb-5 max-w-xs">
+        <Skeleton className="h-3 w-28" />
+        <Skeleton className="mt-1 h-11 w-full rounded-md" />
+      </div>
 
-      <nav className="mt-6 flex items-center justify-between border-t border-rule pt-4">
-        <Skeleton className="h-11 w-24 rounded-md" />
-        <Skeleton className="h-3 w-20" />
-        <Skeleton className="h-11 w-24 rounded-md" />
-      </nav>
+      <SkeletonExtractList />
     </main>
   );
 }

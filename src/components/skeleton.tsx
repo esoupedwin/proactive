@@ -122,3 +122,35 @@ export function SkeletonForm({ fields = 4 }: { fields?: number }) {
     </div>
   );
 }
+
+/**
+ * The extract list and its pager: badges, collected line, headline, source
+ * line, gist per entry. Shared by the route's `loading.tsx` and the in-page
+ * wait after a filter change, so both waits look the same.
+ */
+export function SkeletonExtractList({ rows = 5 }: { rows?: number }) {
+  return (
+    <>
+      <ul className="divide-y divide-rule">
+        {Array.from({ length: rows }, (_, i) => (
+          <li key={i} className="py-4">
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-5 w-14 rounded-full" />
+              <Skeleton className="h-5 w-32 rounded-full" />
+            </div>
+            <Skeleton className="mt-1.5 h-3 w-44" />
+            <Skeleton className="mt-1.5 h-4 w-11/12" />
+            <Skeleton className="mt-1.5 h-3 w-40" />
+            <SkeletonText lines={2} className="mt-2" />
+          </li>
+        ))}
+      </ul>
+
+      <nav className="mt-6 flex items-center justify-between border-t border-rule pt-4">
+        <Skeleton className="h-11 w-24 rounded-md" />
+        <Skeleton className="h-3 w-20" />
+        <Skeleton className="h-11 w-24 rounded-md" />
+      </nav>
+    </>
+  );
+}
