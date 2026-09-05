@@ -4,7 +4,9 @@ import {
   EXPLAIN_SELECTION_MAX,
   explainSelection,
 } from "@/lib/ai/explain";
-import { openAiLlm } from "@/lib/ai/openai";
+import { flushLedger } from "@/lib/ai/ledger";
+import { createOpenAiLlm } from "@/lib/ai/openai";
+import { createUsageCollector } from "@/lib/ai/usage";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Topic } from "@/lib/types";
 
@@ -49,8 +51,9 @@ export async function POST(
   try {
     const selection = text.slice(0, EXPLAIN_SELECTION_MAX);
     const context = (body?.context ?? "").slice(0, EXPLAIN_CONTEXT_MAX);
+    const usage = createUsageCollector();
     const { explanation } = await explainSelection(
-      openAiLlm,
+      createOpenAiLlm(usage),
       topic,
       selection,
       context,
@@ -68,6 +71,8 @@ export async function POST(
     if (saveError) {
       console.error("saving explanation failed", saveError.message);
     }
+
+    await flushLedger(supabase, usage, { userId: user.id, topicId });
 
     return NextResponse.json({ ok: true, explanation });
   } catch (err) {

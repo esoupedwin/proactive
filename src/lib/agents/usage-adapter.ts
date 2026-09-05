@@ -9,14 +9,42 @@ import type { SearchResult } from "../types";
  * All SDK shape assumptions are quarantined here.
  */
 
+/** One input-tokens detail record, whichever casing it arrived in. */
+interface InputTokensDetail {
+  cached_tokens?: number;
+  cachedTokens?: number;
+}
+
 /** Structural subset of the SDK's ModelResponse — keeps us duck-typed. */
 export interface AgentModelResponse {
-  usage: { inputTokens?: number; outputTokens?: number };
+  usage: {
+    inputTokens?: number;
+    outputTokens?: number;
+    /**
+     * The SDK's Usage class normalizes the Responses API's
+     * input_tokens_details into an ARRAY of detail records — a plain object
+     * gets wrapped in [details] (agents-core Usage constructor). Accept
+     * either shape so a future SDK change back to an object still reads.
+     */
+    inputTokensDetails?: InputTokensDetail | InputTokensDetail[];
+  };
   output: Array<{
     type?: string;
     name?: string;
     providerData?: Record<string, unknown>;
   }>;
+}
+
+/** Cached-input tokens of one SDK model turn, summed across detail records. */
+export function cachedInputTokens(
+  usage: AgentModelResponse["usage"] | undefined,
+): number {
+  const details = usage?.inputTokensDetails;
+  const list = Array.isArray(details) ? details : details ? [details] : [];
+  return list.reduce(
+    (n, d) => n + (d.cached_tokens ?? d.cachedTokens ?? 0),
+    0,
+  );
 }
 
 function isWebSearchItem(item: AgentModelResponse["output"][number]): boolean {
@@ -136,8 +164,16 @@ export function createTracingModelProvider(options: {
       const outputTokens = response.usage?.outputTokens ?? 0;
       usage?.record(
         options.model,
-        { input_tokens: inputTokens, output_tokens: outputTokens },
+        {
+          input_tokens: inputTokens,
+          output_tokens: outputTokens,
+          cached_input_tokens: cachedInputTokens(
+            response.usage as AgentModelResponse["usage"] | undefined,
+          ),
+        },
         webSearchCalls,
+        // "reporter_turn" / "info-tracker_turn" in the llm_calls ledger.
+        `${options.agentName}_turn`,
       );
       trace?.record({
         stage: `agent_turn:${options.agentName} (${thisTurn})`,

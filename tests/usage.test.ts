@@ -31,6 +31,7 @@ describe("usage collector", () => {
     expect(snap.by_model["gpt-5-mini"]).toEqual({
       calls: 2,
       input_tokens: 1500,
+      cached_input_tokens: 0,
       output_tokens: 300,
     });
   });
@@ -99,12 +100,14 @@ describe("diffUsage / addUsage", () => {
     expect(delta.by_model["gpt-5-mini"]).toEqual({
       calls: 1,
       input_tokens: 3_000,
+      cached_input_tokens: 0,
       output_tokens: 500,
     });
     // Models untouched in the delta are omitted... gpt-5 had activity, so present.
     expect(delta.by_model["gpt-5"]).toEqual({
       calls: 1,
       input_tokens: 1_000,
+      cached_input_tokens: 0,
       output_tokens: 100,
     });
     expect(delta.estimated_cost_usd).toBeCloseTo(
@@ -188,6 +191,7 @@ describe("sumUsage", () => {
     expect(total.by_model["gpt-5-mini"]).toEqual({
       calls: 2,
       input_tokens: 2_000_000,
+      cached_input_tokens: 0,
       output_tokens: 200_000,
     });
     // 2M in @ $0.25 + 200k out @ $2 + 1M in @ $1.25 + 100k out @ $10 + 3 searches

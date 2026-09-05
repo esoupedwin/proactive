@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createOpenAiEmbedder } from "@/lib/agents/embeddings";
 import { createExaSearcher } from "@/lib/agents/exa";
 import { createSupabaseExtractStore } from "@/lib/agents/extract-store";
+import { flushLedger } from "@/lib/ai/ledger";
 import { runInfoTracker } from "@/lib/agents/tracker/run";
 import { createUsageCollector } from "@/lib/ai/usage";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
@@ -89,6 +90,10 @@ export async function GET(request: Request) {
       `tracker ${topic.id} (${topic.title}): ok=${result.ok} new=${result.newExtracts} merged=${result.mergedExtracts}`,
       JSON.stringify(usage.snapshot()),
     );
+    await flushLedger(supabase, usage, {
+      userId: topic.user_id,
+      topicId: topic.id,
+    });
     results.push({
       topicId: topic.id,
       ok: result.ok,

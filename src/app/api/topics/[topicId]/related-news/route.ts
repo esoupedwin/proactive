@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { createExaSearcher } from "@/lib/agents/exa";
 import { generateNewsQuery } from "@/lib/ai/news-query";
-import { openAiLlm } from "@/lib/ai/openai";
+import { flushLedger } from "@/lib/ai/ledger";
+import { createOpenAiLlm } from "@/lib/ai/openai";
+import { createUsageCollector } from "@/lib/ai/usage";
 import {
   configuredNewsProvider,
   exaToNewsResults,
@@ -62,7 +64,8 @@ export async function GET(
   let query = topic.news_query?.trim() || null;
   if (!query) {
     try {
-      query = await generateNewsQuery(openAiLlm, {
+      const usage = createUsageCollector();
+      query = await generateNewsQuery(createOpenAiLlm(usage), {
         title: topic.title,
         description: topic.description,
         interest_areas: frameFactorNames(topic.interest_frame),
@@ -71,6 +74,7 @@ export async function GET(
         .from("topics")
         .update({ news_query: query })
         .eq("id", topic.id);
+      await flushLedger(supabase, usage, { userId: user.id, topicId: topic.id });
     } catch (err) {
       console.error("lazy news query generation failed", err);
       return NextResponse.json(

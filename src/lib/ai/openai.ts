@@ -85,7 +85,19 @@ export function createOpenAiLlm(
           .length ?? 0;
       const model = response.model ?? requestedModel;
 
-      usage?.record(model, response.usage, webSearchCalls);
+      usage?.record(
+        model,
+        {
+          input_tokens: response.usage?.input_tokens ?? 0,
+          output_tokens: response.usage?.output_tokens ?? 0,
+          cached_input_tokens:
+            response.usage?.input_tokens_details?.cached_tokens ?? 0,
+        },
+        webSearchCalls,
+        // The schema name doubles as the activity label in the llm_calls
+        // ledger ("sentiment_reading", "explanation", "news_query", ...).
+        options.schemaName,
+      );
       traceCall({
         model,
         web_search_calls: webSearchCalls,
@@ -104,5 +116,5 @@ export function createOpenAiLlm(
   };
 }
 
-/** Usage-blind instance for callers that don't need cost accounting. */
-export const openAiLlm: Llm = createOpenAiLlm();
+// No usage-blind instance is exported on purpose: every call site constructs
+// createOpenAiLlm(collector) so its spend lands in the llm_calls ledger.

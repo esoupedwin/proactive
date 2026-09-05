@@ -179,16 +179,41 @@ export interface ModelUsage {
   calls: number;
   input_tokens: number;
   output_tokens: number;
+  /**
+   * Portion of input_tokens served from OpenAI's prompt cache, billed at a
+   * fraction of the input rate. Absent on records stored before this was
+   * tracked — those price all input at the full rate, as they always did.
+   */
+  cached_input_tokens?: number;
 }
 
 export interface ReportUsage {
   calls: number;
   input_tokens: number;
   output_tokens: number;
+  /** See ModelUsage.cached_input_tokens; absent on older stored records. */
+  cached_input_tokens?: number;
   web_search_calls: number;
   by_model: Record<string, ModelUsage>;
   /** Null when a model's pricing is unknown — tokens are still recorded. */
   estimated_cost_usd: number | null;
+}
+
+/** One row of the append-only OpenAI-call ledger (llm_calls). */
+export interface LlmCall {
+  id: string;
+  user_id: string;
+  topic_id: string | null;
+  report_id: string | null;
+  /** What the call was for, e.g. "reporter_turn", "explanation", "embedding". */
+  activity: string;
+  model: string;
+  input_tokens: number;
+  cached_input_tokens: number;
+  output_tokens: number;
+  web_search_calls: number;
+  estimated_cost_usd: number | null;
+  created_at: string;
 }
 
 /** One OpenAI call recorded during report generation. */

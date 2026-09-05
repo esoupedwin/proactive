@@ -3,10 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { USER_CORRECTED_NOTE } from "./agents/reporter/situation";
 import { normalizeUrl } from "./ai/dedupe";
 import { generateInterestFrame } from "./ai/interest-frame";
 import { generateNewsQuery } from "./ai/news-query";
-import { openAiLlm } from "./ai/openai";
+import { flushLedger } from "./ai/ledger";
+import { createOpenAiLlm } from "./ai/openai";
+import { createUsageCollector } from "./ai/usage";
 import { isGenerationLocked } from "./reports";
 import { SEED_TOPICS } from "./seed-data";
 import { buildSpeechScript } from "./speech";
@@ -126,10 +129,12 @@ function parseTopicForm(formData: FormData) {
 async function storeNewsQuery(
   supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
   topicId: string,
+  userId: string,
   topic: { title: string; description: string; interest_frame: InterestFactor[] },
 ): Promise<void> {
   try {
-    const query = await generateNewsQuery(openAiLlm, {
+    const usage = createUsageCollector();
+    const query = await generateNewsQuery(createOpenAiLlm(usage), {
       title: topic.title,
       description: topic.description,
       interest_areas: frameFactorNames(topic.interest_frame),
@@ -140,6 +145,7 @@ async function storeNewsQuery(
         .update({ news_query: query })
         .eq("id", topicId);
     }
+    await flushLedger(supabase, usage, { userId, topicId });
   } catch (err) {
     console.error("news query generation failed", err);
   }
@@ -180,7 +186,7 @@ export async function createTopic(
   }
 
   // "Formulated when the topic is first set up" — stored for reuse.
-  await storeNewsQuery(supabase, topic.id, parsed.data);
+  await storeNewsQuery(supabase, topic.id, user.id, parsed.data);
 
   revalidatePath("/settings/topics");
   redirect(`/topics/${topic.id}`);
@@ -191,7 +197,7 @@ export async function updateTopic(
   _prev: TopicFormState,
   formData: FormData,
 ): Promise<TopicFormState> {
-  const { supabase } = await requireUser();
+  const { supabase, user } = await requireUser();
 
   const parsed = parseTopicForm(formData);
   if (!parsed.success) {
@@ -208,7 +214,7 @@ export async function updateTopic(
   }
 
   // The topic's scope may have changed — refresh the stored search query.
-  await storeNewsQuery(supabase, topicId, parsed.data);
+  await storeNewsQuery(supabase, topicId, user.id, parsed.data);
 
   revalidatePath(`/topics/${topicId}`);
   revalidatePath("/settings/topics");
@@ -228,18 +234,21 @@ export async function draftInterestFrame(input: {
   description: string;
   analytical_question?: string | null;
 }): Promise<{ factors?: InterestFactor[]; error?: string }> {
-  await requireUser();
+  const { supabase, user } = await requireUser();
   const title = input.title.trim();
   const description = input.description.trim();
   if (!title && !description) {
     return { error: "Fill in the title and goal first." };
   }
   try {
-    const factors = await generateInterestFrame(openAiLlm, {
+    const usage = createUsageCollector();
+    const factors = await generateInterestFrame(createOpenAiLlm(usage), {
       title,
       description,
       analytical_question: input.analytical_question?.trim() || null,
     });
+    // No topic exists yet — the draft precedes saving the form.
+    await flushLedger(supabase, usage, { userId: user.id });
     return { factors };
   } catch (err) {
     console.error("interest frame drafting failed", err);
@@ -672,7 +681,19 @@ async function storeTopicFacts(
   userId: string,
   facts: KnowledgeFact[],
 ): Promise<void> {
-  await supabase.from("topic_memory").upsert(
+  // The RLS insert policy only checks user_id, and topic_memory is keyed by
+  // topic_id — so without this, a caller could plant a row they own under
+  // SOMEONE ELSE's topic id before the owner has one, and the owner's own
+  // writes would fail against it forever. Prove the topic is the caller's
+  // (RLS scopes the select) before touching its memory row.
+  const { data: topic } = await supabase
+    .from("topics")
+    .select("id")
+    .eq("id", topicId)
+    .maybeSingle<Pick<Topic, "id">>();
+  if (!topic) return;
+
+  const { error } = await supabase.from("topic_memory").upsert(
     {
       topic_id: topicId,
       user_id: userId,
@@ -681,6 +702,9 @@ async function storeTopicFacts(
     },
     { onConflict: "topic_id" },
   );
+  // Surface, don't swallow: a silent failure here looks like a successful
+  // save in the panel while nothing changed.
+  if (error) console.error("saving topic facts failed", error.message);
   revalidatePath(`/topics/${topicId}`);
 }
 
@@ -707,7 +731,7 @@ export async function updateTopicFact(
     ...current,
     fact: text,
     confidence: "high",
-    source_note: "Corrected by you",
+    source_note: USER_CORRECTED_NOTE,
     ...(current.kind === "state" ? { as_of: asOf || null } : {}),
   };
   await storeTopicFacts(supabase, topicId, user.id, facts);

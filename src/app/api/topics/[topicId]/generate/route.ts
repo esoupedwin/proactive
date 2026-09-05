@@ -5,6 +5,7 @@ import { createSupabaseExtractStore } from "@/lib/agents/extract-store";
 import { createSupabaseReporterPersistence } from "@/lib/agents/report-store";
 import { runReporter } from "@/lib/agents/reporter/run";
 import { runInfoTracker } from "@/lib/agents/tracker/run";
+import { flushLedger } from "@/lib/ai/ledger";
 import { createOpenAiLlm } from "@/lib/ai/openai";
 import { runActiveExpertsForReport } from "@/lib/ai/experts/runner";
 import { createTraceCollector } from "@/lib/ai/trace";
@@ -119,6 +120,12 @@ export async function POST(
   });
 
   if (!result.ok) {
+    // Failed runs still consumed tokens — ledger them before bailing.
+    await flushLedger(supabase, usage, {
+      userId: user.id,
+      topicId: topic.id,
+      reportId: report.id,
+    });
     return NextResponse.json(
       { error: result.error ?? "Report generation failed." },
       { status: 500 },
@@ -144,6 +151,12 @@ export async function POST(
   } catch (err) {
     console.error("experts run failed", err);
   }
+
+  await flushLedger(supabase, usage, {
+    userId: user.id,
+    topicId: topic.id,
+    reportId: report.id,
+  });
 
   return NextResponse.json({
     ok: true,

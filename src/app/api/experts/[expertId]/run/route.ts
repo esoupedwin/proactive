@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { runExpertOnReport } from "@/lib/ai/experts/runner";
+import { flushLedger } from "@/lib/ai/ledger";
 import { createOpenAiLlm } from "@/lib/ai/openai";
 import { foldUsageIntoReport } from "@/lib/ai/report-usage";
 import { createUsageCollector } from "@/lib/ai/usage";
@@ -78,6 +79,11 @@ export async function POST(
     }
     // This run used its own collector, so the cost isn't in reports.usage yet.
     await foldUsageIntoReport(supabase, body.reportId, usage.snapshot());
+    await flushLedger(supabase, usage, {
+      userId: user.id,
+      topicId: expert.topic_id,
+      reportId: body.reportId,
+    });
     return NextResponse.json({ ok: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Expert run failed";

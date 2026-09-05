@@ -52,7 +52,17 @@ export function buildTrackerAgent(options: {
     // is passed straight through to the request; the SDK contributes nothing to
     // `include` for web search, so setting it here clobbers nothing.
     modelSettings: {
-      providerData: { include: ["web_search_call.action.sources"] },
+      // Every turn of a run resends the same growing prefix, but a probe
+      // showed the default in-memory cache never even writes for these
+      // requests — with 24h retention it writes and every later turn hits,
+      // billing the resent prefix at the cached-input rate. The key routes
+      // a topic's requests to one cache shard. The llm_calls ledger's
+      // cached column is the check that this keeps working.
+      promptCacheRetention: "24h",
+      providerData: {
+        include: ["web_search_call.action.sources"],
+        prompt_cache_key: `topic-${deps.topic.id}`,
+      },
     },
     tools: [
       webSearchTool(),

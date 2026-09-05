@@ -46,6 +46,13 @@ export function buildReporterAgent(options: {
   return new Agent({
     name: "reporter",
     model,
+    // Same cache setup as the tracker (see its comment): 24h retention makes
+    // the cache actually write, and the per-topic key keeps every turn of a
+    // run on the same cache shard, so resent prefixes bill at the cached rate.
+    modelSettings: {
+      promptCacheRetention: "24h",
+      providerData: { prompt_cache_key: `topic-${deps.topic.id}` },
+    },
     instructions:
       mode === "question"
         ? questionReporterInstructions(

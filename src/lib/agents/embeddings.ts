@@ -33,6 +33,7 @@ export function createOpenAiEmbedder(usage?: UsageCollector): Embedder {
           model,
           { input_tokens: response.usage?.prompt_tokens ?? 0, output_tokens: 0 },
           0,
+          "embedding",
         );
         // API returns data in input order; sort by index defensively.
         const sorted = [...response.data].sort((a, b) => a.index - b.index);

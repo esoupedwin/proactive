@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { expandMentorTip } from "@/lib/ai/experts/mentor";
+import { flushLedger } from "@/lib/ai/ledger";
 import { createOpenAiLlm } from "@/lib/ai/openai";
 import { foldUsageIntoReport } from "@/lib/ai/report-usage";
 import { addUsage, createUsageCollector } from "@/lib/ai/usage";
@@ -98,6 +99,11 @@ export async function POST(
       .eq("id", output.id);
     // ...and into the report's total, which the run's snapshot predates.
     await foldUsageIntoReport(supabase, output.report_id, delta);
+    await flushLedger(supabase, collector, {
+      userId: user.id,
+      topicId: expert.topic_id,
+      reportId: output.report_id,
+    });
 
     return NextResponse.json({ ok: true, more });
   } catch (err) {

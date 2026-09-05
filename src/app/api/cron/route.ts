@@ -3,6 +3,7 @@ import { createOpenAiEmbedder } from "@/lib/agents/embeddings";
 import { createSupabaseExtractStore } from "@/lib/agents/extract-store";
 import { createSupabaseReporterPersistence } from "@/lib/agents/report-store";
 import { runReporter } from "@/lib/agents/reporter/run";
+import { flushLedger } from "@/lib/ai/ledger";
 import { createOpenAiLlm } from "@/lib/ai/openai";
 import { runActiveExpertsForReport } from "@/lib/ai/experts/runner";
 import { createTraceCollector } from "@/lib/ai/trace";
@@ -103,6 +104,12 @@ export async function GET(request: Request) {
         console.error("experts run failed", err);
       }
     }
+
+    await flushLedger(supabase, usage, {
+      userId: topic.user_id,
+      topicId: topic.id,
+      reportId: report.id,
+    });
 
     results.push({ topicId: topic.id, ok: result.ok, error: result.error });
   }
