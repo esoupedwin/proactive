@@ -6,12 +6,14 @@ import {
   Flame,
   History,
   Scaling,
+  ShieldCheck,
   User,
   type LucideIcon,
 } from "lucide-react";
 import { LinkPending } from "@/components/link-pending";
 import { SettingsHeader } from "@/components/settings-header";
 import { signOut } from "@/lib/actions";
+import { isAdmin } from "@/lib/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Profile } from "@/lib/types";
 
@@ -59,6 +61,14 @@ const TILES: SettingsTile[] = [
   },
 ];
 
+/** Appended to the grid for admin accounts only. */
+const ADMIN_TILE: SettingsTile = {
+  href: "/admin",
+  label: "Admin",
+  description: "Operator tools for admin accounts",
+  Icon: ShieldCheck,
+};
+
 /** Profile & Settings — who you are, and a way into each settings page. */
 export default async function SettingsPage() {
   const supabase = await createSupabaseServerClient();
@@ -72,6 +82,8 @@ export default async function SettingsPage() {
     .select("display_name, avatar_url")
     .eq("id", user.id)
     .maybeSingle<Pick<Profile, "display_name" | "avatar_url">>();
+
+  const tiles = isAdmin(user) ? [...TILES, ADMIN_TILE] : TILES;
 
   return (
     <main className="px-5 pb-16 pt-6">
@@ -119,7 +131,7 @@ export default async function SettingsPage() {
 
       <nav aria-label="Settings">
         <ul className="grid grid-cols-3 gap-x-4 gap-y-6">
-          {TILES.map(({ href, label, description, Icon }) => (
+          {tiles.map(({ href, label, description, Icon }) => (
             <li key={href}>
               <Link
                 href={href}
