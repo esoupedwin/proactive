@@ -1,5 +1,6 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { safeNextPath } from "@/lib/routes";
 
 const PUBLIC_PATHS = ["/login", "/auth"];
 
@@ -44,14 +45,20 @@ export async function middleware(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.search = "";
+    // Carry the page they asked for through sign-in, so a deep link survives
+    // the round trip. The root is the default anyway, and an API route is no
+    // place to land a person.
+    const requested = `${pathname}${request.nextUrl.search}`;
+    if (requested !== "/" && !pathname.startsWith("/api/")) {
+      url.searchParams.set("next", requested);
+    }
     return NextResponse.redirect(url);
   }
 
   if (user && pathname === "/login") {
-    const url = request.nextUrl.clone();
-    url.pathname = "/";
-    url.search = "";
-    return NextResponse.redirect(url);
+    // Already signed in: honour the destination rather than the login page.
+    const next = safeNextPath(request.nextUrl.searchParams.get("next"));
+    return NextResponse.redirect(new URL(next, request.url));
   }
 
   return response;

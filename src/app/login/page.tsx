@@ -2,6 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { safeNextPath } from "@/lib/routes";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { Button, Spinner } from "@/components/ui";
 
@@ -10,6 +11,7 @@ function LoginContent() {
   const [error, setError] = useState<string | null>(null);
   const searchParams = useSearchParams();
   const authFailed = searchParams.get("error") === "auth";
+  const next = safeNextPath(searchParams.get("next"));
 
   async function signInWithGoogle() {
     setPending(true);
@@ -18,7 +20,7 @@ function LoginContent() {
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback?next=/`,
+        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
       },
     });
     if (oauthError) {
