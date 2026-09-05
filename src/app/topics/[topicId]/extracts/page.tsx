@@ -5,7 +5,7 @@ import { FactorFilter } from "@/components/factor-filter";
 import { LinkPending } from "@/components/link-pending";
 import { SummarizeExtractsButton } from "@/components/summarize-extracts-button";
 import { SUMMARY_WINDOW_DAYS } from "@/lib/ai/extracts-summary";
-import { openRouterConfigured } from "@/lib/ai/openrouter";
+import { utilityTierAvailable } from "@/lib/ai/openrouter";
 import { Badge } from "@/components/ui";
 import { formatDateTime, paginate } from "@/lib/reports";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -141,8 +141,8 @@ export default async function TopicExtractsPage({
     <>
       {/* Digest of the window under the current filter. Keyed by filter so
           switching filters clears a stale summary; hidden entirely when
-          OpenRouter isn't configured rather than offering a dead button. */}
-      {openRouterConfigured() && total > 0 && (
+          the utility tier isn't configured rather than offering a dead button. */}
+      {(await utilityTierAvailable()) && total > 0 && (
         <SummarizeExtractsButton
           key={selected}
           topicId={topicId}

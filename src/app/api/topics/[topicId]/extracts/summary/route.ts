@@ -7,11 +7,8 @@ import {
   summaryWindowStart,
 } from "@/lib/ai/extracts-summary";
 import { flushLedger } from "@/lib/ai/ledger";
-import {
-  openRouterComplete,
-  openRouterConfigured,
-  summaryModel,
-} from "@/lib/ai/openrouter";
+import { utilityComplete, utilityTierAvailable } from "@/lib/ai/openrouter";
+import { resolveTierConfig } from "@/lib/ai/tiers";
 import { createUsageCollector } from "@/lib/ai/usage";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { frameFactorNames } from "@/lib/types";
@@ -39,9 +36,9 @@ export async function POST(
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  if (!openRouterConfigured()) {
+  if (!(await utilityTierAvailable())) {
     return NextResponse.json(
-      { error: "OpenRouter is not configured — set OPENROUTER_API_KEY." },
+      { error: "The utility model tier is not configured — see TIER_UTILITY in .env." },
       { status: 503 },
     );
   }
@@ -90,8 +87,7 @@ export async function POST(
 
   const usage = createUsageCollector();
   try {
-    const summary = await openRouterComplete({
-      model: summaryModel(),
+    const summary = await utilityComplete({
       instructions: summaryInstructions(topic, factor || null),
       input: summaryPayload(extracts),
       // Summarization needs no thinking phase — reasoning off is ~30%
@@ -104,7 +100,7 @@ export async function POST(
       summary,
       extractCount: extracts.length,
       days: SUMMARY_WINDOW_DAYS,
-      model: summaryModel(),
+      model: (await resolveTierConfig("utility")).model,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Summary failed";

@@ -71,7 +71,7 @@ export async function runAnalyst(
   const result = await llm.structured({
     // Report tier: reading a briefing against a lens and saying something the
     // report did not is genuine synthesis — model quality is the product.
-    tier: "report",
+    tier: "judgment",
     schema: AnalystSchema,
     schemaName: "analyst_analysis",
     // Text in lib/prompts.ts, the app-wide prompt catalog.

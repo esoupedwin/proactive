@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ReceiptText } from "lucide-react";
+import { Cpu, ReceiptText } from "lucide-react";
 import { LinkPending } from "@/components/link-pending";
 import { SettingsHeader } from "@/components/settings-header";
 import { isAdmin } from "@/lib/admin";
@@ -52,6 +52,27 @@ export default async function AdminPage() {
           <span className="mt-0.5 block text-xs leading-relaxed text-ink-faint">
             Every OpenAI call — when, what for, which model, tokens, and cost.
             Filter and sort; compare against the OpenAI dashboard.
+          </span>
+        </span>
+      </Link>
+
+      <Link
+        href="/admin/models"
+        className="mt-4 flex items-center gap-3 rounded-md border border-rule px-4 py-3 hover:bg-neutral-50"
+      >
+        <span
+          aria-hidden
+          className="flex size-10 shrink-0 items-center justify-center rounded-full border border-rule bg-neutral-50"
+        >
+          <LinkPending>
+            <Cpu className="size-5" aria-hidden />
+          </LinkPending>
+        </span>
+        <span className="min-w-0">
+          <span className="block text-sm font-bold">Model Tiers</span>
+          <span className="mt-0.5 block text-xs leading-relaxed text-ink-faint">
+            Pick the platform and model each tier runs on — judgment, search,
+            utility, embedding. Overrides the .env configuration.
           </span>
         </span>
       </Link>

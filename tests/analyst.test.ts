@@ -197,10 +197,10 @@ describe("runAnalyst", () => {
     );
   });
 
-  it("runs on the report tier — commentary quality is the product", async () => {
+  it("runs on the judgment tier — commentary quality is the product", async () => {
     const { llm, captured } = fakeLlm();
     await runAnalyst(llm, topic, sections, "focus", sources);
-    expect(captured().tier).toBe("report");
+    expect(captured().tier).toBe("judgment");
   });
 
   it("rejects a response missing the commentary field", async () => {

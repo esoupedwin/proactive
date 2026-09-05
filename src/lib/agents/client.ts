@@ -6,10 +6,12 @@ import {
   setTracingDisabled,
   type ModelProvider,
 } from "@openai/agents";
+import { resolveTierConfig, type Platform } from "../ai/tiers";
 
 /**
  * Shared OpenAI client + Agents SDK wiring for the two backend agents
- * (Info Tracker and Reporter).
+ * (Info Tracker and Reporter). Which model each agent runs — and, for the
+ * Reporter, which platform — comes from the tier config (src/lib/ai/tiers.ts).
  */
 
 let client: OpenAI | null = null;
@@ -38,24 +40,41 @@ export function initAgentsSdk(): void {
   sdkReady = true;
 }
 
-/** Model provider for real runs (tests inject a fake one instead). */
-export function createOpenAiModelProvider(): ModelProvider {
+/**
+ * Model provider for real runs (tests inject a fake one instead).
+ *
+ * openai → the Responses API (hosted tools, prompt caching). openrouter →
+ * OpenRouter's OpenAI-compatible chat-completions endpoint: function tools
+ * and structured outputs work (model permitting), hosted tools do not — the
+ * tier config already keeps the search tier off this path.
+ */
+export function createModelProvider(platform: Platform): ModelProvider {
+  if (platform === "openrouter") {
+    if (!process.env.OPENROUTER_API_KEY) {
+      throw new Error("OPENROUTER_API_KEY is not set");
+    }
+    return new OpenAIProvider({
+      apiKey: process.env.OPENROUTER_API_KEY,
+      baseURL: "https://openrouter.ai/api/v1",
+      useResponses: false,
+    });
+  }
   return new OpenAIProvider({
     openAIClient: getSharedOpenAI(),
     useResponses: true,
   });
 }
 
-/** Info Tracker model — cheap search tier. */
-export function trackerModel(): string {
-  return process.env.OPENAI_SEARCH_MODEL ?? "gpt-5-mini";
+/** Info Tracker — search tier (always OpenAI: hosted web_search). */
+export async function trackerModel(): Promise<string> {
+  return (await resolveTierConfig("search")).model;
 }
 
-/** Reporter model — the editorial tier. */
-export function reporterModel(): string {
-  return process.env.OPENAI_REPORT_MODEL ?? "gpt-5";
+/** Reporter — judgment tier: platform + model. */
+export function reporterTier(): Promise<{ platform: Platform; model: string }> {
+  return resolveTierConfig("judgment");
 }
 
-export function embeddingModel(): string {
-  return process.env.OPENAI_EMBEDDING_MODEL ?? "text-embedding-3-small";
+export async function embeddingModel(): Promise<string> {
+  return (await resolveTierConfig("embedding")).model;
 }

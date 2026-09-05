@@ -40,7 +40,7 @@ export function buildReporterAgent(options: {
   trace?: TraceCollector;
 }) {
   const { deps, model, trace } = options;
-  const traced = { trace, tier: "report" as const, model, agent: "reporter" };
+  const traced = { trace, tier: "judgment" as const, model, agent: "reporter" };
   const mode = deps.topic.watch_mode;
 
   return new Agent({

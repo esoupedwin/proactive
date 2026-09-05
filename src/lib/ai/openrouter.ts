@@ -1,3 +1,5 @@
+import OpenAI from "openai";
+import { resolveTierConfig } from "./tiers";
 import type { UsageCollector } from "./usage";
 
 /**
@@ -13,13 +15,60 @@ import type { UsageCollector } from "./usage";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 
-/** Model for the extracts summary; override via OPENROUTER_SUMMARY_MODEL. */
-export function summaryModel(): string {
-  return process.env.OPENROUTER_SUMMARY_MODEL ?? "deepseek/deepseek-v4-flash";
-}
-
 export function openRouterConfigured(): boolean {
   return Boolean(process.env.OPENROUTER_API_KEY);
+}
+
+/** Whether the utility tier can run as currently configured. */
+export async function utilityTierAvailable(): Promise<boolean> {
+  const { platform } = await resolveTierConfig("utility");
+  return platform === "openai"
+    ? Boolean(process.env.OPENAI_API_KEY)
+    : openRouterConfigured();
+}
+
+/**
+ * One plain text completion on the utility tier, whichever platform it is
+ * configured on. The workhorse for cheap secondary features — summaries,
+ * rewrites, classification.
+ */
+export async function utilityComplete(options: {
+  instructions: string;
+  input: string;
+  maxOutputTokens?: number;
+  enableReasoning?: boolean;
+  usage?: UsageCollector;
+  activity?: string;
+}): Promise<string> {
+  const { platform, model } = await resolveTierConfig("utility");
+  if (platform === "openrouter") {
+    return openRouterComplete({ ...options, model });
+  }
+
+  // OpenAI path: same chat-completions shape against api.openai.com.
+  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const response = await client.chat.completions.create({
+    model,
+    messages: [
+      { role: "system", content: options.instructions },
+      { role: "user", content: options.input },
+    ],
+    max_completion_tokens: options.maxOutputTokens ?? 1024,
+  });
+  options.usage?.record(
+    response.model ?? model,
+    {
+      input_tokens: response.usage?.prompt_tokens ?? 0,
+      output_tokens: response.usage?.completion_tokens ?? 0,
+      cached_input_tokens:
+        response.usage?.prompt_tokens_details?.cached_tokens ?? 0,
+    },
+    0,
+    options.activity ?? "utility_call",
+  );
+  const text = response.choices[0]?.message?.content?.trim();
+  if (!text) throw new Error("utility model returned no content");
+  return text;
 }
 
 interface OpenRouterUsage {

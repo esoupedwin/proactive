@@ -5,8 +5,8 @@ import type { z } from "zod";
  * implementation. The real implementation lives in openai.ts.
  */
 export interface StructuredCallOptions<T> {
-  /** Which configured model tier to use. */
-  tier: "search" | "report";
+  /** Which configured model tier to use (see src/lib/ai/tiers.ts). */
+  tier: "search" | "judgment";
   /** System-style instructions. */
   instructions: string;
   /** User input / task content. */

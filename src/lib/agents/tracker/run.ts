@@ -3,7 +3,7 @@ import type { TraceCollector } from "../../ai/trace";
 import type { UsageCollector } from "../../ai/usage";
 import type { AgentStateData, Topic } from "../../types";
 import {
-  createOpenAiModelProvider,
+  createModelProvider,
   initAgentsSdk,
   trackerModel,
 } from "../client";
@@ -58,7 +58,7 @@ export async function runInfoTracker(options: {
   const { store, exa, topic, usage, trace } = options;
   const counters: TrackerCounters = { created: 0, merged: 0 };
   const startedAt = new Date().toISOString();
-  const model = trackerModel();
+  const model = await trackerModel();
   // Hoisted so the catch below can still write state back — a run that ends
   // early has usually recorded extracts already, and that has to be visible.
   let state: AgentStateData = {};
@@ -83,7 +83,7 @@ export async function runInfoTracker(options: {
     // true chronological order: turn → its web searches → tool calls.
     const runner = new Runner({
       modelProvider: createTracingModelProvider({
-        inner: options.modelProvider ?? createOpenAiModelProvider(),
+        inner: options.modelProvider ?? createModelProvider("openai"),
         usage,
         trace,
         tier: "search",

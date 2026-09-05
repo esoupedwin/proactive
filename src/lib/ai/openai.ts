@@ -1,6 +1,7 @@
 import OpenAI from "openai";
-import { zodTextFormat } from "openai/helpers/zod";
+import { zodResponseFormat, zodTextFormat } from "openai/helpers/zod";
 import type { Llm, StructuredCallOptions } from "./llm";
+import { resolveTierConfig } from "./tiers";
 import type { TraceCollector } from "./trace";
 import type { UsageCollector } from "./usage";
 
@@ -16,16 +17,29 @@ function getOpenAI(): OpenAI {
   return client;
 }
 
-function modelFor(tier: "search" | "report"): string {
-  return tier === "search"
-    ? process.env.OPENAI_SEARCH_MODEL ?? "gpt-5-mini"
-    : process.env.OPENAI_REPORT_MODEL ?? "gpt-5";
+let orClient: OpenAI | null = null;
+
+/** OpenRouter speaks the OpenAI chat-completions dialect — same SDK, new base. */
+function getOpenRouter(): OpenAI {
+  if (!orClient) {
+    if (!process.env.OPENROUTER_API_KEY) {
+      throw new Error("OPENROUTER_API_KEY is not set");
+    }
+    orClient = new OpenAI({
+      apiKey: process.env.OPENROUTER_API_KEY,
+      baseURL: "https://openrouter.ai/api/v1",
+    });
+  }
+  return orClient;
 }
 
 /**
- * OpenAI-backed Llm using the Responses API. Pass a UsageCollector to
- * record token usage + web-search tool calls, and a TraceCollector to
- * record the full prompt flow (per-report transparency).
+ * The Llm implementation, routed per tier: each structured call resolves its
+ * tier's platform + model from TIER_* config. The OpenAI path uses the
+ * Responses API (structured parse, hosted web search); the OpenRouter path
+ * uses chat completions with a JSON-schema response format. Pass a
+ * UsageCollector to record tokens/cost into the llm_calls ledger, and a
+ * TraceCollector for the per-report prompt log.
  */
 export function createOpenAiLlm(
   usage?: UsageCollector,
@@ -33,8 +47,9 @@ export function createOpenAiLlm(
 ): Llm {
   return {
     async structured<T>(options: StructuredCallOptions<T>): Promise<T> {
-      const openai = getOpenAI();
-      const requestedModel = modelFor(options.tier);
+      const { platform, model: requestedModel } = await resolveTierConfig(
+        options.tier,
+      );
       const startedAt = new Date().toISOString();
       const startMs = Date.now();
 
@@ -57,9 +72,71 @@ export function createOpenAiLlm(
         });
       };
 
+      if (platform === "openrouter") {
+        // The hosted web_search tool is OpenAI-only; a tier configured onto
+        // OpenRouter must not silently lose its searches.
+        if (options.useWebSearch) {
+          throw new Error(
+            `${options.schemaName} needs hosted web search — configure its tier (${options.tier}) on the openai platform`,
+          );
+        }
+        try {
+          const response = await getOpenRouter().chat.completions.parse({
+            model: requestedModel,
+            messages: [
+              { role: "system", content: options.instructions },
+              { role: "user", content: options.input },
+            ],
+            response_format: zodResponseFormat(
+              options.schema as never,
+              options.schemaName,
+            ),
+            // OpenRouter extension: report actual billed cost in usage.
+            ...({ usage: { include: true } } as object),
+          });
+          const u = response.usage as
+            | (typeof response.usage & { cost?: number })
+            | undefined;
+          usage?.record(
+            response.model ?? requestedModel,
+            {
+              input_tokens: u?.prompt_tokens ?? 0,
+              output_tokens: u?.completion_tokens ?? 0,
+              cached_input_tokens:
+                u?.prompt_tokens_details?.cached_tokens ?? 0,
+              ...(typeof u?.cost === "number" ? { cost_usd: u.cost } : {}),
+            },
+            0,
+            options.schemaName,
+          );
+          traceCall({
+            model: response.model ?? requestedModel,
+            web_search_calls: 0,
+            input_tokens: u?.prompt_tokens ?? 0,
+            output_tokens: u?.completion_tokens ?? 0,
+          });
+          const parsed = response.choices[0]?.message.parsed as T | null;
+          if (parsed == null) {
+            throw new Error(
+              `OpenRouter returned no parsed output for ${options.schemaName}`,
+            );
+          }
+          return options.schema.parse(parsed);
+        } catch (err) {
+          traceCall({
+            model: requestedModel,
+            web_search_calls: 0,
+            input_tokens: 0,
+            output_tokens: 0,
+            error: err instanceof Error ? err.message : "request failed",
+          });
+          throw err;
+        }
+      }
+
       let response;
       try {
-        response = await openai.responses.parse({
+        response = await getOpenAI().responses.parse({
           model: requestedModel,
           instructions: options.instructions,
           input: options.input,
@@ -118,3 +195,5 @@ export function createOpenAiLlm(
 
 // No usage-blind instance is exported on purpose: every call site constructs
 // createOpenAiLlm(collector) so its spend lands in the llm_calls ledger.
+
+export { getOpenAI as getSharedLlmOpenAI, getOpenRouter as getOpenRouterClient };

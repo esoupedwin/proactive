@@ -223,7 +223,8 @@ export interface LlmCallTrace {
   stage: string;
   /** Which agent produced this call ("info-tracker" | "reporter"); absent for expert/legacy calls. */
   agent?: string;
-  tier: "search" | "report";
+  /** "report" on rows stored before the tier was renamed to judgment. */
+  tier: "search" | "judgment" | "report";
   model: string;
   instructions: string;
   input: string;

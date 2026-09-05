@@ -20,7 +20,7 @@ export function createOpenAiEmbedder(usage?: UsageCollector): Embedder {
     async embed(texts) {
       if (texts.length === 0) return [];
       const openai = getSharedOpenAI();
-      const model = embeddingModel();
+      const model = await embeddingModel();
       const vectors: number[][] = [];
       for (let i = 0; i < texts.length; i += BATCH_SIZE) {
         const batch = texts.slice(i, i + BATCH_SIZE);

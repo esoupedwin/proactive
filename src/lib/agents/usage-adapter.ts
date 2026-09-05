@@ -121,7 +121,7 @@ export function createTracingModelProvider(options: {
   inner: ModelProvider;
   usage?: UsageCollector;
   trace?: TraceCollector;
-  tier: "search" | "report";
+  tier: "search" | "judgment";
   model: string;
   agentName: string;
   instructions: string;
@@ -233,7 +233,7 @@ export function createTracingModelProvider(options: {
 export function tracedToolCall<Args, Result>(
   options: {
     trace?: TraceCollector;
-    tier: "search" | "report";
+    tier: "search" | "judgment";
     model: string;
     name: string;
     agent: string;

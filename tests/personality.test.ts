@@ -103,7 +103,7 @@ describe("runPersonalityBaseline", () => {
 });
 
 describe("runPersonalityUpdate", () => {
-  it("runs on the report tier without web search — judging shifts is interpretation", async () => {
+  it("runs on the judgment tier without web search — judging shifts is interpretation", async () => {
     const { llm, captured } = fakeLlm({
       updates: [
         {
@@ -132,7 +132,7 @@ describe("runPersonalityUpdate", () => {
       ],
     );
 
-    expect(captured().tier).toBe("report");
+    expect(captured().tier).toBe("judgment");
     expect(captured().useWebSearch).toBeUndefined();
 
     const input = JSON.parse(captured().input) as {

@@ -10,11 +10,7 @@ import type {
   ReportSections,
   Topic,
 } from "../../types";
-import {
-  createOpenAiModelProvider,
-  initAgentsSdk,
-  reporterModel,
-} from "../client";
+import { createModelProvider, initAgentsSdk, reporterTier } from "../client";
 import type { ExtractStore } from "../extract-store";
 import type { ReporterPersistence } from "../report-store";
 import type {
@@ -90,7 +86,7 @@ export async function runReporter(options: {
 }): Promise<ReporterRunResult> {
   const { persistence, store, topic, reportId, usage, trace } = options;
   const startedAt = new Date().toISOString();
-  const model = reporterModel();
+  const { platform, model } = await reporterTier();
 
   const persistUsage = async () => {
     try {
@@ -176,10 +172,10 @@ export async function runReporter(options: {
     // true chronological order: turn → its web searches → tool calls.
     const runner = new Runner({
       modelProvider: createTracingModelProvider({
-        inner: options.modelProvider ?? createOpenAiModelProvider(),
+        inner: options.modelProvider ?? createModelProvider(platform),
         usage,
         trace,
-        tier: "report",
+        tier: "judgment",
         model,
         agentName: "reporter",
         instructions: agent.instructions as string,

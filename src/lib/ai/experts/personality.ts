@@ -179,7 +179,7 @@ export async function runPersonalityUpdate(
     // Report tier: judging whether evidence really moves a person's position
     // is interpretation, not retrieval — misreading a shift is the failure
     // mode that matters.
-    tier: "report",
+    tier: "judgment",
     schema: PersonalityUpdateSchema,
     schemaName: "personality_update",
     // Text in lib/prompts.ts, the app-wide prompt catalog.
