@@ -3,6 +3,7 @@ import {
   applySituationUpdates,
   renderSituation,
   situationSnapshot,
+  USER_CORRECTED_NOTE,
 } from "@/lib/agents/reporter/situation";
 import type { KnowledgeFact } from "@/lib/types";
 
@@ -41,6 +42,27 @@ describe("applySituationUpdates", () => {
     expect(facts[1]!.as_of).toBe("2026-08-20");
     expect(facts[1]!.source_note).toContain("was: Republicans hold 53");
     expect(revised).toEqual(new Set(["Republicans hold 52 Senate seats."]));
+  });
+
+  it("never revises a fact the user corrected by hand", () => {
+    const corrected: KnowledgeFact = {
+      ...STATE,
+      fact: "Republicans hold 52 Senate seats.",
+      source_note: USER_CORRECTED_NOTE,
+    };
+    const { facts, revised } = applySituationUpdates(
+      [corrected],
+      [
+        {
+          fact: corrected.fact,
+          revised_fact: "Republicans hold 53 Senate seats.",
+          as_of: "2026-08-21",
+          extract_ids: ["e1"],
+        },
+      ],
+    );
+    expect(facts[0]).toEqual(corrected);
+    expect(revised.size).toBe(0);
   });
 
   it("never revises a rule, even when asked to", () => {

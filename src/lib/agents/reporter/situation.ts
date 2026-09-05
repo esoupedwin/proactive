@@ -107,6 +107,14 @@ export async function establishSituation(
  * rather than appended, so the loop cannot grow the base without searching.
  * Returns the new base and which facts moved, for the report snapshot.
  */
+/**
+ * Source note stamped by updateTopicFact when the user corrects a fact by
+ * hand. A fact carrying it is theirs: the reporter's revisions skip it, so
+ * the panel's promise that corrections stick is enforced here, not just
+ * documented. Editing the fact again or re-establishing lifts the hold.
+ */
+export const USER_CORRECTED_NOTE = "Corrected by you";
+
 export function applySituationUpdates(
   facts: KnowledgeFact[],
   updates: SituationUpdate[],
@@ -115,7 +123,9 @@ export function applySituationUpdates(
   const revised = new Set<string>();
   const next = facts.map((f) => {
     const update = byText.get(f.fact.trim());
-    if (!update || f.kind === "rule") return f;
+    if (!update || f.kind === "rule" || f.source_note === USER_CORRECTED_NOTE) {
+      return f;
+    }
     const text = update.revised_fact.trim();
     if (!text || text === f.fact) return f;
     revised.add(text);
