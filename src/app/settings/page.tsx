@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { clsx } from "clsx";
 import {
   CircleDollarSign,
   Flame,
@@ -26,6 +27,8 @@ interface SettingsTile {
   /** Announced instead of the two-line label, which reads oddly aloud. */
   description: string;
   Icon: LucideIcon;
+  /** "danger" marks a privileged tile in red, apart from everyday settings. */
+  tone?: "danger";
 }
 
 const TILES: SettingsTile[] = [
@@ -67,6 +70,7 @@ const ADMIN_TILE: SettingsTile = {
   label: "Admin",
   description: "Operator tools for admin accounts",
   Icon: ShieldCheck,
+  tone: "danger",
 };
 
 /** Profile & Settings — who you are, and a way into each settings page. */
@@ -131,21 +135,35 @@ export default async function SettingsPage() {
 
       <nav aria-label="Settings">
         <ul className="grid grid-cols-3 gap-x-4 gap-y-6">
-          {tiles.map(({ href, label, description, Icon }) => (
+          {tiles.map(({ href, label, description, Icon, tone }) => (
             <li key={href}>
               <Link
                 href={href}
                 title={description}
                 className="group flex flex-col items-center gap-2 text-center"
               >
-                <span className="flex aspect-square w-full items-center justify-center rounded-xl border border-rule transition-colors group-hover:bg-neutral-50">
+                <span
+                  className={clsx(
+                    "flex aspect-square w-full items-center justify-center rounded-xl border transition-colors",
+                    tone === "danger"
+                      ? "border-red-200 text-red-700 group-hover:bg-red-50"
+                      : "border-rule group-hover:bg-neutral-50",
+                  )}
+                >
                   {/* LinkPending swaps in a spinner mid-navigation; sized to
                       the icon so the tile doesn't shift. */}
                   <LinkPending className="size-8">
                     <Icon className="size-8" strokeWidth={1.5} aria-hidden />
                   </LinkPending>
                 </span>
-                <span className="text-sm leading-snug">{label}</span>
+                <span
+                  className={clsx(
+                    "text-sm leading-snug",
+                    tone === "danger" && "text-red-700",
+                  )}
+                >
+                  {label}
+                </span>
               </Link>
             </li>
           ))}
