@@ -23,3 +23,10 @@ body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
+
+/* Inside the briefing, the native (unroundable) selection box is hidden;
+   ExplainSelection paints its own rounded highlight from the selection's
+   geometry instead. Scoped, so selection elsewhere stays browser-default. */
+.rounded-selection ::selection {
+  background: transparent;
+}
