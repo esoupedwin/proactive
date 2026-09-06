@@ -4,6 +4,7 @@ import { createSupabaseExtractStore } from "@/lib/agents/extract-store";
 import { createSupabaseReporterPersistence } from "@/lib/agents/report-store";
 import { runReporter } from "@/lib/agents/reporter/run";
 import { flushLedger } from "@/lib/ai/ledger";
+import { notifyReportReady } from "@/lib/email";
 import { createOpenAiLlm } from "@/lib/ai/openai";
 import { runActiveExpertsForReport } from "@/lib/ai/experts/runner";
 import { createTraceCollector } from "@/lib/ai/trace";
@@ -110,6 +111,16 @@ export async function GET(request: Request) {
       topicId: topic.id,
       reportId: report.id,
     });
+
+    if (result.ok) {
+      // Scheduled runs only get the doorbell — a manual Generate means the
+      // user is already looking at the page.
+      await notifyReportReady({
+        topic,
+        sections: result.sections ?? null,
+        summary: result.summary ?? null,
+      });
+    }
 
     results.push({ topicId: topic.id, ok: result.ok, error: result.error });
   }

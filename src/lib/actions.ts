@@ -811,6 +811,8 @@ export async function updateProfilePreferences(formData: FormData): Promise<void
         ? detail
         : "standard",
       expertise_level: expertise || null,
+      // An unchecked checkbox submits nothing — absence means off.
+      notify_email: formData.get("notify_email") === "on",
       updated_at: new Date().toISOString(),
     })
     .eq("id", user.id);

@@ -34,6 +34,8 @@ export interface Profile {
   expertise_level: string | null;
   /** Body text weight (Lexend variable axis), e.g. 300/400/500. */
   font_weight: number;
+  /** Email the user when one of their topics finishes a report. */
+  notify_email: boolean;
   last_viewed_topic_id: string | null;
   created_at: string;
   updated_at: string;

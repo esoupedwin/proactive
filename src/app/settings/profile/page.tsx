@@ -17,9 +17,11 @@ export default async function ProfilePreferencesPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("default_detail_level, expertise_level")
+    .select("default_detail_level, expertise_level, notify_email")
     .eq("id", user.id)
-    .maybeSingle<Pick<Profile, "default_detail_level" | "expertise_level">>();
+    .maybeSingle<
+      Pick<Profile, "default_detail_level" | "expertise_level" | "notify_email">
+    >();
 
   return (
     <main className="px-5 pb-16 pt-6">
@@ -56,6 +58,23 @@ export default async function ProfilePreferencesPage() {
             placeholder="e.g. product manager"
           />
         </Field>
+        <label className="flex items-start gap-2.5 rounded-md border border-rule px-4 py-3">
+          <input
+            type="checkbox"
+            name="notify_email"
+            defaultChecked={profile?.notify_email ?? true}
+            className="mt-0.5 size-4 accent-ink"
+          />
+          <span className="min-w-0">
+            <span className="block text-sm font-medium">
+              Email me when a report is ready
+            </span>
+            <span className="mt-0.5 block text-xs leading-relaxed text-ink-faint">
+              One short email when a scheduled update finishes, with a link
+              to the briefing. Reports you generate by hand never email you.
+            </span>
+          </span>
+        </label>
         <Button type="submit" variant="outline">
           Save preferences
         </Button>
